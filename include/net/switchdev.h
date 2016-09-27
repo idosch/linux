@@ -182,6 +182,7 @@ int switchdev_port_obj_del(struct net_device *dev,
 			   const struct switchdev_obj *obj);
 int switchdev_port_obj_dump(struct net_device *dev, struct switchdev_obj *obj,
 			    switchdev_obj_dump_cb_t *cb);
+struct net_device *switchdev_get_lowest_dev(struct net_device *dev);
 int register_switchdev_notifier(struct notifier_block *nb);
 int unregister_switchdev_notifier(struct notifier_block *nb);
 int call_switchdev_notifiers_info(unsigned long val, struct net_device *dev,
@@ -243,6 +244,12 @@ static inline int switchdev_port_obj_dump(struct net_device *dev,
 					  switchdev_obj_dump_cb_t *cb)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline struct net_device *
+switchdev_get_lowest_dev(struct net_device *dev)
+{
+	return NULL;
 }
 
 static inline int register_switchdev_notifier(struct notifier_block *nb)

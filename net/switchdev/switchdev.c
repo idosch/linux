@@ -571,6 +571,30 @@ int switchdev_port_obj_dump(struct net_device *dev, struct switchdev_obj *obj,
 }
 EXPORT_SYMBOL_GPL(switchdev_port_obj_dump);
 
+struct net_device *switchdev_get_lowest_dev(struct net_device *dev)
+{
+	const struct switchdev_ops *ops = dev->switchdev_ops;
+	struct net_device *lower_dev;
+	struct net_device *port_dev;
+	struct list_head *iter;
+
+	/* Recusively search down until we find a sw port dev.
+	 * (A sw port dev supports switchdev_port_attr_get).
+	 */
+
+	if (ops && ops->switchdev_port_attr_get)
+		return dev;
+
+	netdev_for_each_lower_dev(dev, lower_dev, iter) {
+		port_dev = switchdev_get_lowest_dev(lower_dev);
+		if (port_dev)
+			return port_dev;
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(switchdev_get_lowest_dev);
+
 static RAW_NOTIFIER_HEAD(switchdev_notif_chain);
 
 /**
