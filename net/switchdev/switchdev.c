@@ -655,6 +655,22 @@ int call_switchdev_notifiers_info(unsigned long val, struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(call_switchdev_notifiers_info);
 
+/**
+ *	call_switchdev_notifiers - Call notifiers
+ *	@val: value passed unmodified to notifier function
+ *	@dev: port device
+ *
+ *	Call all switchdev notifier blocks. Return value is the same as
+ *	for raw_notifier_call_chain(). rtnl_lock must be held.
+ */
+int call_switchdev_notifiers(unsigned long val, struct net_device *dev)
+{
+	struct switchdev_notifier_info info;
+
+	return call_switchdev_notifiers_info(val, dev, &info);
+}
+EXPORT_SYMBOL_GPL(call_switchdev_notifiers);
+
 struct switchdev_vlan_dump {
 	struct switchdev_obj_port_vlan vlan;
 	struct sk_buff *skb;

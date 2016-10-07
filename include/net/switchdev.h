@@ -187,6 +187,7 @@ int register_switchdev_notifier(struct notifier_block *nb);
 int unregister_switchdev_notifier(struct notifier_block *nb);
 int call_switchdev_notifiers_info(unsigned long val, struct net_device *dev,
 				  struct switchdev_notifier_info *info);
+int call_switchdev_notifiers(unsigned long val, struct net_device *dev);
 int switchdev_port_bridge_getlink(struct sk_buff *skb, u32 pid, u32 seq,
 				  struct net_device *dev, u32 filter_mask,
 				  int nlflags);
@@ -265,6 +266,12 @@ static inline int unregister_switchdev_notifier(struct notifier_block *nb)
 static inline int call_switchdev_notifiers_info(unsigned long val,
 						struct net_device *dev,
 						struct switchdev_notifier_info *info)
+{
+	return NOTIFY_DONE;
+}
+
+static inline int call_switchdev_notifiers(unsigned long val,
+					   struct net_device *dev)
 {
 	return NOTIFY_DONE;
 }
