@@ -1939,11 +1939,11 @@ static void ofdpa_port_fdb_learn_work(struct work_struct *work)
 
 	rtnl_lock();
 	if (learned && removing)
-		call_switchdev_notifiers(SWITCHDEV_FDB_DEL,
-					 lw->ofdpa_port->dev, &info.info);
+		call_switchdev_notifiers_info(SWITCHDEV_FDB_DEL,
+					      lw->ofdpa_port->dev, &info.info);
 	else if (learned && !removing)
-		call_switchdev_notifiers(SWITCHDEV_FDB_ADD,
-					 lw->ofdpa_port->dev, &info.info);
+		call_switchdev_notifiers_info(SWITCHDEV_FDB_ADD,
+					      lw->ofdpa_port->dev, &info.info);
 	rtnl_unlock();
 
 	ofdpa_kfree(lw->trans, work);

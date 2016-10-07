@@ -611,7 +611,7 @@ int unregister_switchdev_notifier(struct notifier_block *nb)
 EXPORT_SYMBOL_GPL(unregister_switchdev_notifier);
 
 /**
- *	call_switchdev_notifiers - Call notifiers
+ *	call_switchdev_notifiers_info - Call notifiers
  *	@val: value passed unmodified to notifier function
  *	@dev: port device
  *	@info: notifier information data
@@ -621,15 +621,15 @@ EXPORT_SYMBOL_GPL(unregister_switchdev_notifier);
  *	Return values are same as for atomic_notifier_call_chain().
  *	rtnl_lock must be held.
  */
-int call_switchdev_notifiers(unsigned long val, struct net_device *dev,
-			     struct switchdev_notifier_info *info)
+int call_switchdev_notifiers_info(unsigned long val, struct net_device *dev,
+				  struct switchdev_notifier_info *info)
 {
 	ASSERT_RTNL();
 
 	info->dev = dev;
 	return raw_notifier_call_chain(&switchdev_notif_chain, val, info);
 }
-EXPORT_SYMBOL_GPL(call_switchdev_notifiers);
+EXPORT_SYMBOL_GPL(call_switchdev_notifiers_info);
 
 struct switchdev_vlan_dump {
 	struct switchdev_obj_port_vlan vlan;
