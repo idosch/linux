@@ -35,6 +35,7 @@
 #include <net/net_namespace.h>
 #include <net/netns/generic.h>
 #include <asm/uaccess.h>
+#include <net/switchdev.h>
 
 #include <linux/if_vlan.h>
 #include "vlan.h"
@@ -500,6 +501,86 @@ static struct notifier_block vlan_notifier_block __read_mostly = {
 	.notifier_call = vlan_device_event,
 };
 
+static int vlan_switchdev_sync(struct net_device *dev, struct vlan_group *grp)
+{
+	struct netdev_notifier_changeupper_info changeupper_info;
+	struct net_device *vlandev;
+	int i, err;
+
+	changeupper_info.master = false;
+	changeupper_info.linking = true;
+	changeupper_info.upper_info = NULL;
+
+	vlan_group_for_each_dev(grp, i, vlandev) {
+		changeupper_info.upper_dev = vlandev;
+
+		err = call_netdevice_notifiers_info(NETDEV_PRECHANGEUPPER, dev,
+						    &changeupper_info.info);
+		err = notifier_from_errno(err);
+		if (err)
+			return err;
+
+		err = call_netdevice_notifiers_info(NETDEV_CHANGEUPPER, dev,
+						    &changeupper_info.info);
+		err = notifier_from_errno(err);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int vlan_switchdev_propagate(struct vlan_group *grp)
+{
+	struct net_device *vlandev;
+	int i, err;
+
+	vlan_group_for_each_dev(grp, i, vlandev) {
+		err = call_switchdev_notifiers(SWITCHDEV_SYNC, vlandev);
+		err = notifier_to_errno(err);
+		if (err)
+			return err;
+	}
+
+	return 0;
+}
+
+static int vlan_switchdev_event(struct notifier_block *unused,
+				unsigned long event, void *ptr)
+{
+	struct net_device *dev = switchdev_notifier_info_to_dev(ptr);
+	struct vlan_info *vlan_info;
+	struct vlan_group *grp;
+	int err;
+
+	ASSERT_RTNL();
+
+	if (!switchdev_get_lowest_dev(dev))
+		goto out;
+
+	vlan_info = rtnl_dereference(dev->vlan_info);
+	if (!vlan_info)
+		goto out;
+	grp = &vlan_info->grp;
+
+	switch (event) {
+	case SWITCHDEV_SYNC:
+		err = vlan_switchdev_sync(dev, grp);
+		if (err)
+			return notifier_from_errno(err);
+
+		err = vlan_switchdev_propagate(grp);
+		return notifier_from_errno(err);
+	}
+
+out:
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block vlan_switchdev_notifier __read_mostly = {
+	.notifier_call = vlan_switchdev_event,
+};
+
 /*
  *	VLAN IOCTL handler.
  *	o execute requested action or pass command to the device driver
@@ -743,6 +824,10 @@ static int __init vlan_proto_init(void)
 	if (err < 0)
 		goto err0;
 
+	err = register_switchdev_notifier(&vlan_switchdev_notifier);
+	if (err < 0)
+		goto err1;
+
 	err = register_netdevice_notifier(&vlan_notifier_block);
 	if (err < 0)
 		goto err2;
@@ -772,6 +857,8 @@ err4:
 err3:
 	unregister_netdevice_notifier(&vlan_notifier_block);
 err2:
+	unregister_switchdev_notifier(&vlan_switchdev_notifier);
+err1:
 	unregister_pernet_subsys(&vlan_net_ops);
 err0:
 	return err;
@@ -789,6 +876,8 @@ static void __exit vlan_cleanup_module(void)
 	vlan_netlink_fini();
 
 	unregister_netdevice_notifier(&vlan_notifier_block);
+
+	unregister_switchdev_notifier(&vlan_switchdev_notifier);
 
 	unregister_pernet_subsys(&vlan_net_ops);
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
