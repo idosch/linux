@@ -86,9 +86,6 @@
 
 static BLOCKING_NOTIFIER_HEAD(fib_chain);
 
-static void fib_notify(struct net *net, struct notifier_block *nb,
-		       enum fib_event_type event_type);
-
 static int call_fib_notifier(struct notifier_block *nb, struct net *net,
 			     enum fib_event_type event_type,
 			     struct fib_notifier_info *info)
@@ -1930,7 +1927,7 @@ static void fib_leaf_notify(struct net *net, struct key_vector *l,
 	hlist_for_each_entry(fa, &l->leaf, fa_list) {
 		struct fib_info *fi = fa->fa_info;
 
-		if (!fi)
+		if (!fi || (!nb && !fi->fib_should_offload))
 			continue;
 
 		/* local and main table can share the same trie,
@@ -1939,9 +1936,16 @@ static void fib_leaf_notify(struct net *net, struct key_vector *l,
 		if (tb->tb_id != fa->tb_id)
 			continue;
 
-		call_fib_entry_notifier(nb, net, event_type, l->key,
-					KEYLENGTH - fa->fa_slen, fi, fa->fa_tos,
-					fa->fa_type, fa->tb_id, 0);
+		if (nb)
+			call_fib_entry_notifier(nb, net, event_type, l->key,
+						KEYLENGTH - fa->fa_slen, fi,
+						fa->fa_tos, fa->fa_type,
+						fa->tb_id, 0);
+		else
+			call_fib_entry_notifiers(net, event_type, l->key,
+						 KEYLENGTH - fa->fa_slen, fi,
+						 fa->fa_tos, fa->fa_type,
+						 fa->tb_id, 0);
 	}
 }
 
@@ -1963,8 +1967,8 @@ static void fib_table_notify(struct net *net, struct fib_table *tb,
 	}
 }
 
-static void fib_notify(struct net *net, struct notifier_block *nb,
-		       enum fib_event_type event_type)
+void fib_notify(struct net *net, struct notifier_block *nb,
+		enum fib_event_type event_type)
 {
 	unsigned int h;
 

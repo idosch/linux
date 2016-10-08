@@ -46,6 +46,7 @@
 #include <net/rtnetlink.h>
 #include <net/xfrm.h>
 #include <net/l3mdev.h>
+#include <net/switchdev.h>
 #include <trace/events/fib.h>
 
 #ifndef CONFIG_IP_MULTIPLE_TABLES
@@ -1203,6 +1204,38 @@ static struct notifier_block fib_netdev_notifier = {
 	.notifier_call = fib_netdev_event,
 };
 
+static void fib_switchdev_sync(const struct net_device *dev)
+{
+	if (fib_nh_mark_set(dev, true)) {
+		fib_notify(dev_net(dev), NULL, FIB_EVENT_ENTRY_ADD);
+		fib_nh_mark_set(dev, false);
+	}
+}
+
+static int fib_switchdev_event(struct notifier_block *this, unsigned long event,
+			       void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+
+	ASSERT_RTNL();
+
+	if (!switchdev_get_lowest_dev(dev))
+		goto out;
+
+	switch(event) {
+	case SWITCHDEV_SYNC:
+		fib_switchdev_sync(dev);
+		break;
+	}
+
+out:
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block fib_switchdev_notifier = {
+	.notifier_call = fib_switchdev_event,
+};
+
 static int __net_init ip_fib_net_init(struct net *net)
 {
 	int err;
@@ -1300,6 +1333,7 @@ void __init ip_fib_init(void)
 	register_pernet_subsys(&fib_net_ops);
 	register_netdevice_notifier(&fib_netdev_notifier);
 	register_inetaddr_notifier(&fib_inetaddr_notifier);
+	register_switchdev_notifier(&fib_switchdev_notifier);
 
 	fib_trie_init();
 }

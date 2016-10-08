@@ -124,6 +124,7 @@ struct fib_info {
 	int			fib_weight;
 #endif
 	unsigned int		fib_offload_cnt;
+	bool			fib_should_offload;
 	struct rcu_head		rcu;
 	struct fib_nh		fib_nh[0];
 #define fib_dev		fib_nh[0].nh_dev
@@ -361,6 +362,7 @@ int ip_fib_check_default(__be32 gw, struct net_device *dev);
 int fib_sync_down_dev(struct net_device *dev, unsigned long event, bool force);
 int fib_sync_down_addr(struct net_device *dev, __be32 local);
 int fib_sync_up(struct net_device *dev, unsigned int nh_flags);
+int fib_nh_mark_set(const struct net_device *dev, bool offload);
 
 extern u32 fib_multipath_secret __read_mostly;
 
@@ -377,6 +379,8 @@ void fib_select_path(struct net *net, struct fib_result *res,
 /* Exported by fib_trie.c */
 void fib_trie_init(void);
 struct fib_table *fib_trie_table(u32 id, struct fib_table *alias);
+void fib_notify(struct net *net, struct notifier_block *nb,
+		enum fib_event_type event_type);
 
 static inline void fib_combine_itag(u32 *itag, const struct fib_result *res)
 {

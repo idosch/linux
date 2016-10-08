@@ -1432,6 +1432,26 @@ int fib_sync_down_dev(struct net_device *dev, unsigned long event, bool force)
 	return ret;
 }
 
+int fib_nh_mark_set(const struct net_device *dev, bool offload)
+{
+	unsigned int hash = fib_devindex_hashfn(dev->ifindex);
+	struct hlist_head *head = &fib_info_devhash[hash];
+	struct fib_nh *nh;
+	int ret = 0;
+
+	hlist_for_each_entry(nh, head, nh_hash) {
+		struct fib_info *fi = nh->nh_parent;
+
+		if (nh->nh_dev != dev)
+			continue;
+
+		fi->fib_should_offload = offload;
+		ret++;
+	}
+
+	return ret;
+}
+
 /* Must be invoked inside of an RCU protected region.  */
 void fib_select_default(const struct flowi4 *flp, struct fib_result *res)
 {
