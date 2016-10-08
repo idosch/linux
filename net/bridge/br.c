@@ -131,6 +131,9 @@ static int br_switchdev_event(struct notifier_block *unused,
 	struct switchdev_notifier_fdb_info *fdb_info;
 	int err = NOTIFY_DONE;
 
+	if (!switchdev_get_lowest_dev(dev))
+		goto out;
+
 	p = br_port_get_rtnl(dev);
 	if (!p)
 		goto out;
@@ -152,6 +155,12 @@ static int br_switchdev_event(struct notifier_block *unused,
 		if (err)
 			err = notifier_from_errno(err);
 		break;
+	case SWITCHDEV_SYNC:
+		err = nbp_switchdev_sync(p);
+		if (err)
+			return notifier_from_errno(err);
+
+		return call_switchdev_notifiers(event, br->dev);
 	}
 
 out:

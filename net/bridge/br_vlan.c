@@ -1081,3 +1081,28 @@ void br_vlan_get_stats(const struct net_bridge_vlan *v,
 		stats->tx_packets += txpackets;
 	}
 }
+
+int nbp_vlan_switchdev_sync(const struct net_bridge_port *p)
+{
+        struct net_bridge_vlan_group *vg = nbp_vlan_group(p);
+        struct net_bridge_vlan *vlan;
+        struct switchdev_attr attr = {
+                .orig_dev = p->br->dev,
+                .id = SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING,
+                .flags = SWITCHDEV_F_SKIP_EOPNOTSUPP,
+                .u.vlan_filtering = p->br->vlan_enabled,
+        };
+        int err;
+
+        err = switchdev_port_attr_set(p->dev, &attr);
+        if (err && err != -EOPNOTSUPP)
+                return err;
+
+        list_for_each_entry(vlan, &vg->vlan_list, vlist) {
+                err = __vlan_vid_add(p->dev, p->br, vlan->vid, vlan->flags);
+                if (err)
+                        return err;
+        }
+
+        return 0;
+}

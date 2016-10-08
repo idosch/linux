@@ -707,6 +707,61 @@ static int br_mdb_del(struct sk_buff *skb, struct nlmsghdr *nlh)
 	return err;
 }
 
+static int nbp_mdb_switchdev_entry_sync(struct net_bridge_port *p,
+					const struct net_bridge_port_group *pg)
+{
+	struct br_mdb_complete_info *complete_info;
+	struct switchdev_obj_port_mdb mdb = {
+		.obj = {
+			.orig_dev = p->dev,
+			.id = SWITCHDEV_OBJ_ID_PORT_MDB,
+			.flags = SWITCHDEV_F_DEFER,
+			.complete = br_mdb_complete,
+		},
+		.vid = pg->addr.vid,
+	};
+
+	/* Freed in br_mdb_complete() */
+	complete_info = kmalloc(sizeof(*complete_info), GFP_ATOMIC);
+	if (!complete_info)
+		return -ENOMEM;
+	complete_info->port = p;
+	memcpy(&complete_info->ip, &pg->addr, sizeof(struct br_ip));
+
+	if (pg->addr.proto == htons(ETH_P_IP))
+		ip_eth_mc_map(pg->addr.u.ip4, mdb.addr);
+#if IS_ENABLED(CONFIG_IPV6)
+	else
+		ipv6_eth_mc_map(&pg->addr.u.ip6, mdb.addr);
+#endif
+	mdb.obj.complete_priv = complete_info;
+	switchdev_port_obj_add(p->dev, &mdb.obj);
+
+	return 0;
+}
+
+int nbp_mdb_switchdev_sync(struct net_bridge_port *p)
+{
+	struct net_bridge_port_group *pg;
+	int err = 0;
+
+	if (p->br->multicast_disabled)
+		goto out;
+
+	/* Elements in p->mglist are freed using call_rcu_bh() */
+	rcu_read_lock_bh();
+	hlist_for_each_entry_rcu_bh(pg, &p->mglist, mglist) {
+		err = nbp_mdb_switchdev_entry_sync(p, pg);
+		if (err)
+			goto out_unlock;
+	}
+
+out_unlock:
+	rcu_read_unlock_bh();
+out:
+	return err;
+}
+
 void br_mdb_init(void)
 {
 	rtnl_register(PF_BRIDGE, RTM_GETMDB, NULL, br_mdb_dump, NULL);

@@ -598,6 +598,7 @@ void br_mdb_notify(struct net_device *dev, struct net_bridge_port *port,
 		   struct br_ip *group, int type, u8 flags);
 void br_rtr_notify(struct net_device *dev, struct net_bridge_port *port,
 		   int type);
+int nbp_mdb_switchdev_sync(struct net_bridge_port *p);
 void br_multicast_count(struct net_bridge *br, const struct net_bridge_port *p,
 			const struct sk_buff *skb, u8 type, u8 dir);
 int br_multicast_init_stats(struct net_bridge *br);
@@ -778,6 +779,7 @@ int nbp_vlan_init(struct net_bridge_port *port);
 int nbp_get_num_vlan_infos(struct net_bridge_port *p, u32 filter_mask);
 void br_vlan_get_stats(const struct net_bridge_vlan *v,
 		       struct br_vlan_stats *stats);
+int nbp_vlan_switchdev_sync(const struct net_bridge_port *p);
 
 static inline struct net_bridge_vlan_group *br_vlan_group(
 					const struct net_bridge *br)
@@ -964,6 +966,11 @@ static inline void br_vlan_get_stats(const struct net_bridge_vlan *v,
 				     struct br_vlan_stats *stats)
 {
 }
+
+static inline int nbp_vlan_switchdev_sync(const struct net_bridge_port *p)
+{
+	return 0;
+}
 #endif
 
 struct nf_br_ops {
@@ -1058,6 +1065,7 @@ void nbp_switchdev_frame_mark(const struct net_bridge_port *p,
 			      struct sk_buff *skb);
 bool nbp_switchdev_allowed_egress(const struct net_bridge_port *p,
 				  const struct sk_buff *skb);
+int nbp_switchdev_sync(struct net_bridge_port *p);
 #else
 static inline int nbp_switchdev_mark_set(struct net_bridge_port *p)
 {
@@ -1073,6 +1081,11 @@ static inline bool nbp_switchdev_allowed_egress(const struct net_bridge_port *p,
 						const struct sk_buff *skb)
 {
 	return true;
+}
+
+static inline int nbp_switchdev_sync(struct net_bridge_port *p)
+{
+	return 0;
 }
 #endif /* CONFIG_NET_SWITCHDEV */
 
