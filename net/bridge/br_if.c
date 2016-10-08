@@ -297,6 +297,8 @@ static void del_nbp(struct net_bridge_port *p)
 	br_netpoll_disable(p);
 
 	call_rcu(&p->rcu, destroy_nbp_rcu);
+
+	call_switchdev_notifiers(SWITCHDEV_SYNC, dev);
 }
 
 /* Delete bridge device */
@@ -573,6 +575,12 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 		goto err7;
 	}
 
+	err = call_switchdev_notifiers(SWITCHDEV_SYNC, br->dev);
+	if (err) {
+		netdev_err(dev, "failed to sync with upper layers\n");
+		goto err8;
+	}
+
 	spin_lock_bh(&br->lock);
 	changed_addr = br_stp_recalculate_bridge_id(br);
 
@@ -593,6 +601,8 @@ int br_add_if(struct net_bridge *br, struct net_device *dev)
 
 	return 0;
 
+err8:
+	nbp_vlan_flush(p);
 err7:
 	list_del_rcu(&p->list);
 	br_fdb_delete_by_port(br, p, 0, 1);
@@ -614,6 +624,7 @@ err1:
 put_back:
 	dev_put(dev);
 	kfree(p);
+	call_switchdev_notifiers(SWITCHDEV_SYNC, dev);
 	return err;
 }
 

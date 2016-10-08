@@ -1715,6 +1715,12 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 		goto err_upper_unlink;
 	}
 
+	res = call_switchdev_notifiers(SWITCHDEV_SYNC, bond_dev);
+	if (res) {
+		netdev_err(bond_dev, "Failed to sync with upper layers");
+		goto err_sysfs_slave_del;
+	}
+
 	bond->slave_cnt++;
 	bond_compute_features(bond);
 	bond_set_carrier(bond);
@@ -1738,6 +1744,9 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev)
 	return 0;
 
 /* Undo stages on error */
+err_sysfs_slave_del:
+	bond_sysfs_slave_del(new_slave);
+
 err_upper_unlink:
 	bond_upper_dev_unlink(bond, new_slave);
 
@@ -1783,6 +1792,7 @@ err_restore_mtu:
 
 err_free:
 	bond_free_slave(new_slave);
+	call_switchdev_notifiers(SWITCHDEV_SYNC, slave_dev);
 
 err_undo_flags:
 	/* Enslave of first slave has failed and we need to fix master's mac */
@@ -1963,6 +1973,8 @@ static int __bond_release_one(struct net_device *bond_dev,
 	slave_dev->priv_flags &= ~IFF_BONDING;
 
 	bond_free_slave(slave);
+
+	call_switchdev_notifiers(SWITCHDEV_SYNC, slave_dev);
 
 	return 0;
 }

@@ -1247,6 +1247,13 @@ static int team_port_add(struct team *team, struct net_device *port_dev)
 		goto err_option_port_add;
 	}
 
+	err = call_switchdev_notifiers(SWITCHDEV_SYNC, dev);
+	if (err) {
+		netdev_err(dev, "Device %s failed to sync with upper layers\n",
+			   portname);
+		goto err_switchdev_sync;
+	}
+
 	port->index = -1;
 	list_add_tail_rcu(&port->list, &team->port_list);
 	team_port_enable(team, port);
@@ -1257,6 +1264,9 @@ static int team_port_add(struct team *team, struct net_device *port_dev)
 	netdev_info(dev, "Port device %s added\n", portname);
 
 	return 0;
+
+err_switchdev_sync:
+	__team_option_inst_del_port(team, port);
 
 err_option_port_add:
 	team_upper_dev_unlink(team, port);
@@ -1284,6 +1294,7 @@ err_port_enter:
 
 err_set_mtu:
 	kfree(port);
+	call_switchdev_notifiers(SWITCHDEV_SYNC, port_dev);
 
 	return err;
 }
@@ -1324,6 +1335,7 @@ static int team_port_del(struct team *team, struct net_device *port_dev)
 	kfree_rcu(port, rcu);
 	netdev_info(dev, "Port device %s removed\n", portname);
 	__team_compute_features(team);
+	call_switchdev_notifiers(SWITCHDEV_SYNC, port_dev);
 
 	return 0;
 }

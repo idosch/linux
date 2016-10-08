@@ -151,6 +151,7 @@ struct switchdev_ops {
 enum switchdev_notifier_type {
 	SWITCHDEV_FDB_ADD = 1,
 	SWITCHDEV_FDB_DEL,
+	SWITCHDEV_SYNC,
 };
 
 struct switchdev_notifier_info {
