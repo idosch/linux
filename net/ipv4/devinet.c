@@ -64,6 +64,7 @@
 #include <net/rtnetlink.h>
 #include <net/net_namespace.h>
 #include <net/addrconf.h>
+#include <net/switchdev.h>
 
 #include "fib_lookup.h"
 
@@ -1497,6 +1498,45 @@ static struct notifier_block ip_netdev_notifier = {
 	.notifier_call = inetdev_event,
 };
 
+static void inetdev_switchdev_sync(struct in_device *in_dev)
+{
+	struct in_ifaddr *ifa1, **ifap;
+
+	for (ifap = &in_dev->ifa_list; (ifa1 = *ifap) != NULL;
+	     ifap = &ifa1->ifa_next)
+		blocking_notifier_call_chain(&inetaddr_chain, NETDEV_UP, ifa1);
+}
+
+static int inetdev_switchdev_event(struct notifier_block *this,
+				   unsigned long event, void *ptr)
+{
+
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	struct in_device *in_dev = __in_dev_get_rtnl(dev);
+
+	ASSERT_RTNL();
+
+	if (!switchdev_get_lowest_dev(dev))
+		goto out;
+
+	if (!in_dev)
+		goto out;
+
+	switch(event) {
+	case SWITCHDEV_SYNC:
+		inetdev_switchdev_sync(in_dev);
+		break;
+	}
+
+out:
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block ip_switchdev_notifier = {
+	.notifier_call = inetdev_switchdev_event,
+	.priority = 10, /* must be called before fib and neigh notifiers */
+};
+
 static size_t inet_nlmsg_size(void)
 {
 	return NLMSG_ALIGN(sizeof(struct ifaddrmsg))
@@ -2427,6 +2467,7 @@ void __init devinet_init(void)
 
 	register_gifconf(PF_INET, inet_gifconf);
 	register_netdevice_notifier(&ip_netdev_notifier);
+	register_switchdev_notifier(&ip_switchdev_notifier);
 
 	queue_delayed_work(system_power_efficient_wq, &check_lifetime_work, 0);
 
