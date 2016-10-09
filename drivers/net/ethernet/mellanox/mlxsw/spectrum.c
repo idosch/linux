@@ -4296,6 +4296,7 @@ static int mlxsw_sp_master_bridge_vlan_link(struct mlxsw_sp *mlxsw_sp,
 			return PTR_ERR(f);
 	}
 
+	f->dev = vlan_dev;
 	f->ref_count++;
 
 	return 0;
@@ -4312,6 +4313,8 @@ static void mlxsw_sp_master_bridge_vlan_unlink(struct mlxsw_sp *mlxsw_sp,
 		mlxsw_sp_rif_bridge_destroy(mlxsw_sp, f->r);
 	if (f && --f->ref_count == 0)
 		mlxsw_sp_fid_destroy(mlxsw_sp, f);
+	if (f)
+		f->dev = mlxsw_sp->master_bridge.dev;
 }
 
 static int mlxsw_sp_netdevice_bridge_event(struct net_device *br_dev,

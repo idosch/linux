@@ -422,7 +422,8 @@ static int mlxsw_sp_fid_map(struct mlxsw_sp *mlxsw_sp, u16 fid, bool valid)
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(svfa), svfa_pl);
 }
 
-static struct mlxsw_sp_fid *mlxsw_sp_fid_alloc(u16 fid)
+static struct mlxsw_sp_fid *mlxsw_sp_fid_alloc(const struct mlxsw_sp *mlxsw_sp,
+					       u16 fid)
 {
 	struct mlxsw_sp_fid *f;
 
@@ -430,6 +431,7 @@ static struct mlxsw_sp_fid *mlxsw_sp_fid_alloc(u16 fid)
 	if (!f)
 		return NULL;
 
+	f->dev = mlxsw_sp->master_bridge.dev;
 	f->fid = fid;
 
 	return f;
@@ -453,7 +455,7 @@ struct mlxsw_sp_fid *mlxsw_sp_fid_create(struct mlxsw_sp *mlxsw_sp, u16 fid)
 	if (err)
 		goto err_fid_map;
 
-	f = mlxsw_sp_fid_alloc(fid);
+	f = mlxsw_sp_fid_alloc(mlxsw_sp, fid);
 	if (!f) {
 		err = -ENOMEM;
 		goto err_allocate_fid;
