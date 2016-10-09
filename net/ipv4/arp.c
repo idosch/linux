@@ -115,6 +115,7 @@
 #include <net/netrom.h>
 #include <net/dst_metadata.h>
 #include <net/ip_tunnels.h>
+#include <net/switchdev.h>
 
 #include <linux/uaccess.h>
 
@@ -1223,6 +1224,31 @@ static struct notifier_block arp_netdev_notifier = {
 	.notifier_call = arp_netdev_event,
 };
 
+static int arp_switchdev_event(struct notifier_block *this, unsigned long event,
+			       void *ptr)
+{
+	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	int err;
+
+	ASSERT_RTNL();
+
+	if (!switchdev_get_lowest_dev(dev))
+		goto out;
+
+	switch (event) {
+	case SWITCHDEV_SYNC:
+		err = neigh_switchdev_sync(&arp_tbl, dev);
+		return notifier_from_errno(err);
+	}
+
+out:
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block arp_switchdev_notifier = {
+	.notifier_call = arp_switchdev_event,
+};
+
 /* Note, that it is not on notifier chain.
    It is necessary, that this routine was called after route cache will be
    flushed.
@@ -1254,6 +1280,7 @@ void __init arp_init(void)
 	neigh_sysctl_register(NULL, &arp_tbl.parms, NULL);
 #endif
 	register_netdevice_notifier(&arp_netdev_notifier);
+	register_switchdev_notifier(&arp_switchdev_notifier);
 }
 
 #ifdef CONFIG_PROC_FS

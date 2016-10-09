@@ -263,6 +263,37 @@ int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 }
 EXPORT_SYMBOL(neigh_ifdown);
 
+int neigh_switchdev_sync(const struct neigh_table *tbl, struct net_device *dev)
+{
+	struct neigh_hash_table *nht;
+	struct neighbour *n;
+	unsigned int h;
+	int err = 0;
+
+	if (!dev->netdev_ops->ndo_neigh_construct)
+		goto out;
+
+	rcu_read_lock();
+	nht = rcu_dereference(tbl->nht);
+	for (h = 0; h < (1 << nht->hash_shift); h++) {
+		for (n = rcu_dereference(nht->hash_buckets[h]); n != NULL;
+		     n = rcu_dereference(n->next)) {
+			if (n->dev != dev)
+				continue;
+
+			err = dev->netdev_ops->ndo_neigh_construct(dev, n);
+			if (err)
+				goto out_unlock;
+		}
+	}
+
+out_unlock:
+	rcu_read_unlock();
+out:
+	return err;
+}
+EXPORT_SYMBOL(neigh_switchdev_sync);
+
 static struct neighbour *neigh_alloc(struct neigh_table *tbl, struct net_device *dev)
 {
 	struct neighbour *n = NULL;
