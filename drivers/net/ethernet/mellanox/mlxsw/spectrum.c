@@ -4205,13 +4205,13 @@ static int mlxsw_sp_netdevice_port_upper_event(struct net_device *dev,
 				 mlxsw_sp_port_vlan_unlink(mlxsw_sp_port,
 							   upper_dev);
 		} else if (netif_is_bridge_master(upper_dev)) {
-			if (info->linking)
+			if (info->linking && !mlxsw_sp_port->bridged)
 				err = mlxsw_sp_port_bridge_join(mlxsw_sp_port,
 								upper_dev);
 			else
 				mlxsw_sp_port_bridge_leave(mlxsw_sp_port);
 		} else if (netif_is_lag_master(upper_dev)) {
-			if (info->linking)
+			if (info->linking && !mlxsw_sp_port->lagged)
 				err = mlxsw_sp_port_lag_join(mlxsw_sp_port,
 							     upper_dev);
 			else
@@ -4295,6 +4295,9 @@ static int mlxsw_sp_master_bridge_vlan_link(struct mlxsw_sp *mlxsw_sp,
 		if (IS_ERR(f))
 			return PTR_ERR(f);
 	}
+
+	if (f->dev == vlan_dev)
+		return 0;
 
 	f->dev = vlan_dev;
 	f->ref_count++;
@@ -4584,6 +4587,8 @@ static int mlxsw_sp_netdevice_vport_event(struct net_device *dev,
 		if (info->linking) {
 			if (WARN_ON(!mlxsw_sp_vport))
 				return -EINVAL;
+			if (mlxsw_sp_vport->bridged)
+				break;
 			err = mlxsw_sp_vport_bridge_join(mlxsw_sp_vport,
 							 upper_dev);
 		} else {
