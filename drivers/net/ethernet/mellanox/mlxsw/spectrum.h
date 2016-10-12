@@ -105,7 +105,6 @@ struct mlxsw_sp_fid {
 
 struct mlxsw_sp_rif {
 	struct net_device *dev;
-	unsigned int ref_count;
 	struct mlxsw_sp_fid *f;
 	unsigned char addr[ETH_ALEN];
 	int mtu;
