@@ -3969,6 +3969,20 @@ mlxsw_sp_port_pvid_vport_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port)
 	mlxsw_sp_vport->lagged = 0;
 }
 
+static void mlxsw_sp_port_lag_leave_sync(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp_port *mlxsw_sp_vport, *tmp;
+
+	list_for_each_entry_safe(mlxsw_sp_vport, tmp,
+				 &mlxsw_sp_port->vports_list, vport.list)
+		mlxsw_sp_port_vport_remove(mlxsw_sp_port, mlxsw_sp_vport->dev);
+
+	if (mlxsw_sp_port->bridged) {
+		mlxsw_sp_port_active_vlans_del(mlxsw_sp_port);
+		mlxsw_sp_port_bridge_leave(mlxsw_sp_port);
+	}
+}
+
 static int mlxsw_sp_port_lag_join(struct mlxsw_sp_port *mlxsw_sp_port,
 				  struct net_device *lag_dev)
 {
@@ -4021,7 +4035,6 @@ static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 				    struct net_device *lag_dev)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	struct mlxsw_sp_port *mlxsw_sp_vport, *tmp;
 	u16 lag_id = mlxsw_sp_port->lag_id;
 	struct mlxsw_sp_upper *lag;
 
@@ -4033,14 +4046,8 @@ static void mlxsw_sp_port_lag_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 	mlxsw_sp_lag_col_port_disable(mlxsw_sp_port, lag_id);
 	mlxsw_sp_lag_col_port_remove(mlxsw_sp_port, lag_id);
 
-	list_for_each_entry_safe(mlxsw_sp_vport, tmp,
-				 &mlxsw_sp_port->vports_list, vport.list)
-		mlxsw_sp_port_vport_remove(mlxsw_sp_port, mlxsw_sp_vport->dev);
-
-	if (mlxsw_sp_port->bridged) {
-		mlxsw_sp_port_active_vlans_del(mlxsw_sp_port);
-		mlxsw_sp_port_bridge_leave(mlxsw_sp_port);
-	}
+	/* Cleanup must be done while LAG is still valid. */
+	mlxsw_sp_port_lag_leave_sync(mlxsw_sp_port);
 
 	if (lag->ref_count == 1)
 		mlxsw_sp_lag_destroy(mlxsw_sp, lag_id);
