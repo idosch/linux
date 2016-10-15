@@ -674,6 +674,19 @@ mlxsw_sp_neigh_entry_lookup(struct mlxsw_sp *mlxsw_sp, const void *addr,
 				      &key, mlxsw_sp_neigh_ht_params);
 }
 
+static void mlxsw_sp_neigh_entry_queue(struct mlxsw_sp_neigh_entry *neigh_entry)
+{
+	/* Take a reference to ensure the neighbour won't be
+	 * destructed until we drop the reference in delayed
+	 * work.
+	 */
+	neigh_clone(neigh_entry->n);
+	if (!mlxsw_core_schedule_dw(&neigh_entry->dw, 0)) {
+		neigh_release(neigh_entry->n);
+		mlxsw_sp_port_dev_put(neigh_entry->mlxsw_sp_port);
+	}
+}
+
 int mlxsw_sp_router_neigh_construct(struct net_device *dev,
 				    struct neighbour *n)
 {
@@ -706,6 +719,16 @@ int mlxsw_sp_router_neigh_construct(struct net_device *dev,
 	err = mlxsw_sp_neigh_entry_insert(mlxsw_sp, neigh_entry);
 	if (err)
 		goto err_neigh_entry_insert;
+
+	if (n->nud_state & NUD_VALID) {
+		/* Take a reference on the netdev to make sure we
+		 * can later access its priv in delayed work.
+		 */
+		mlxsw_sp_port_dev_hold(mlxsw_sp_port);
+		neigh_entry->mlxsw_sp_port = mlxsw_sp_port;
+		mlxsw_sp_neigh_entry_queue(neigh_entry);
+	}
+
 	return 0;
 
 err_neigh_entry_insert:
@@ -1032,15 +1055,7 @@ int mlxsw_sp_router_netevent_event(struct notifier_block *unused,
 		}
 		neigh_entry->mlxsw_sp_port = mlxsw_sp_port;
 
-		/* Take a reference to ensure the neighbour won't be
-		 * destructed until we drop the reference in delayed
-		 * work.
-		 */
-		neigh_clone(n);
-		if (!mlxsw_core_schedule_dw(&neigh_entry->dw, 0)) {
-			neigh_release(n);
-			mlxsw_sp_port_dev_put(mlxsw_sp_port);
-		}
+		mlxsw_sp_neigh_entry_queue(neigh_entry);
 		break;
 	}
 

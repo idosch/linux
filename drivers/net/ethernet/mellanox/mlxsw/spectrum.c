@@ -3121,6 +3121,11 @@ struct mlxsw_sp_port *mlxsw_sp_port_lower_dev_hold(struct net_device *dev)
 	return mlxsw_sp_port;
 }
 
+void mlxsw_sp_port_dev_hold(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	dev_hold(mlxsw_sp_port->dev);
+}
+
 void mlxsw_sp_port_dev_put(struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	dev_put(mlxsw_sp_port->dev);

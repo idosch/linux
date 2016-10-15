@@ -364,6 +364,7 @@ struct mlxsw_sp_port {
 };
 
 struct mlxsw_sp_port *mlxsw_sp_port_lower_dev_hold(struct net_device *dev);
+void mlxsw_sp_port_dev_hold(struct mlxsw_sp_port *mlxsw_sp_port);
 void mlxsw_sp_port_dev_put(struct mlxsw_sp_port *mlxsw_sp_port);
 
 static inline bool
