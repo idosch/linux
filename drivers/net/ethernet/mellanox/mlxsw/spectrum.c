@@ -3163,9 +3163,7 @@ static bool mlxsw_sp_rif_should_config(struct mlxsw_sp_rif *r,
 {
 	switch (event) {
 	case NETDEV_UP:
-		if (!r)
-			return true;
-		return false;
+		return true;
 	case NETDEV_DOWN:
 		if (r && !in_dev->ifa_list)
 			return true;
