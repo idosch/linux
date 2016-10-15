@@ -3331,6 +3331,9 @@ static int mlxsw_sp_vport_rif_sp_join(struct mlxsw_sp_port *mlxsw_sp_vport,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_vport->mlxsw_sp;
 	struct mlxsw_sp_rif *r;
 
+	if (mlxsw_sp_vport_fid_get(mlxsw_sp_vport))
+		return 0;
+
 	r = mlxsw_sp_rif_find_by_dev(mlxsw_sp, l3_dev);
 	if (!r) {
 		r = mlxsw_sp_vport_rif_sp_create(mlxsw_sp_vport, l3_dev);
@@ -3496,6 +3499,9 @@ static int mlxsw_sp_rif_bridge_create(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_rif *r;
 	u16 rif;
 	int err;
+
+	if (f->r)
+		return 0;
 
 	rif = mlxsw_sp_avail_rif_get(mlxsw_sp);
 	if (rif == MLXSW_SP_INVALID_RIF)
