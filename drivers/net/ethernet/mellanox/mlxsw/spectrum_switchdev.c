@@ -883,62 +883,44 @@ mlxsw_sp_port_fdb_static_add(struct mlxsw_sp_port *mlxsw_sp_port,
 						   true, false);
 }
 
-static int mlxsw_sp_port_mdb_op(struct mlxsw_sp *mlxsw_sp, const char *addr,
-				u16 fid, u16 mid, bool adding)
+static int mlxsw_sp_port_mdb_op(struct mlxsw_sp *mlxsw_sp,
+				const struct mlxsw_sp_mid *mid, bool adding)
 {
 	char *sfd_pl;
 	int err;
+
+	/* MDB entry already exists, we just changed the port list */
+	if (mid->ref_count != 1)
+		return 0;
 
 	sfd_pl = kmalloc(MLXSW_REG_SFD_LEN, GFP_KERNEL);
 	if (!sfd_pl)
 		return -ENOMEM;
 
 	mlxsw_reg_sfd_pack(sfd_pl, mlxsw_sp_sfd_op(adding), 0);
-	mlxsw_reg_sfd_mc_pack(sfd_pl, 0, addr, fid,
-			      MLXSW_REG_SFD_REC_ACTION_NOP, mid);
+	mlxsw_reg_sfd_mc_pack(sfd_pl, 0, mid->addr, mid->fid,
+			      MLXSW_REG_SFD_REC_ACTION_NOP, mid->mid);
 	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sfd), sfd_pl);
 	kfree(sfd_pl);
 	return err;
 }
 
-static int mlxsw_sp_port_smid_set(struct mlxsw_sp_port *mlxsw_sp_port, u16 mid,
-				  bool add, bool clear_all_ports)
-{
-	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	char *smid_pl;
-	int err, i;
-
-	smid_pl = kmalloc(MLXSW_REG_SMID_LEN, GFP_KERNEL);
-	if (!smid_pl)
-		return -ENOMEM;
-
-	mlxsw_reg_smid_pack(smid_pl, mid, mlxsw_sp_port->local_port, add);
-	if (clear_all_ports) {
-		for (i = 1; i < MLXSW_PORT_MAX_PORTS; i++)
-			if (mlxsw_sp->ports[i])
-				mlxsw_reg_smid_port_mask_set(smid_pl, i, 1);
-	}
-	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(smid), smid_pl);
-	kfree(smid_pl);
-	return err;
-}
-
-static struct mlxsw_sp_mid *__mlxsw_sp_mc_get(struct mlxsw_sp *mlxsw_sp,
-					      const unsigned char *addr,
-					      u16 fid)
+static struct mlxsw_sp_mid *mlxsw_sp_mid_entry_find(struct mlxsw_sp *mlxsw_sp,
+						    const unsigned char *addr,
+						    u16 fid)
 {
 	struct mlxsw_sp_mid *mid;
 
-	list_for_each_entry(mid, &mlxsw_sp->br_mids.list, list) {
+	list_for_each_entry(mid, &mlxsw_sp->br_mids.list, list)
 		if (ether_addr_equal(mid->addr, addr) && mid->fid == fid)
 			return mid;
-	}
+
 	return NULL;
 }
 
-static struct mlxsw_sp_mid *__mlxsw_sp_mc_alloc(struct mlxsw_sp *mlxsw_sp,
-						const unsigned char *addr,
-						u16 fid)
+static struct mlxsw_sp_mid *mlxsw_sp_mid_entry_alloc(struct mlxsw_sp *mlxsw_sp,
+						     const unsigned char *addr,
+						     u16 fid)
 {
 	struct mlxsw_sp_mid *mid;
 	u16 mid_idx;
@@ -946,77 +928,155 @@ static struct mlxsw_sp_mid *__mlxsw_sp_mc_alloc(struct mlxsw_sp *mlxsw_sp,
 	mid_idx = find_first_zero_bit(mlxsw_sp->br_mids.mapped,
 				      MLXSW_SP_MID_MAX);
 	if (mid_idx == MLXSW_SP_MID_MAX)
-		return NULL;
+		return ERR_PTR(-ERANGE);
 
 	mid = kzalloc(sizeof(*mid), GFP_KERNEL);
 	if (!mid)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	set_bit(mid_idx, mlxsw_sp->br_mids.mapped);
 	ether_addr_copy(mid->addr, addr);
 	mid->fid = fid;
 	mid->mid = mid_idx;
-	mid->ref_count = 0;
 	list_add_tail(&mid->list, &mlxsw_sp->br_mids.list);
 
 	return mid;
 }
 
-static int __mlxsw_sp_mc_dec_ref(struct mlxsw_sp *mlxsw_sp,
-				 struct mlxsw_sp_mid *mid)
+static void mlxsw_sp_mid_entry_dealloc(struct mlxsw_sp *mlxsw_sp,
+				       struct mlxsw_sp_mid *mid)
 {
-	if (--mid->ref_count == 0) {
-		list_del(&mid->list);
-		clear_bit(mid->mid, mlxsw_sp->br_mids.mapped);
-		kfree(mid);
-		return 1;
+	list_del(&mid->list);
+	clear_bit(mid->mid, mlxsw_sp->br_mids.mapped);
+	kfree(mid);
+}
+
+static int mlxsw_sp_mid_entry_clear(struct mlxsw_sp *mlxsw_sp, u16 mid)
+{
+	char *smid_pl;
+	int err, i;
+
+	smid_pl = kzalloc(MLXSW_REG_SMID_LEN, GFP_KERNEL);
+	if (!smid_pl)
+		return -ENOMEM;
+
+	mlxsw_reg_smid_mid_set(smid_pl, mid);
+	for (i = 0; i < MLXSW_PORT_MAX_PORTS; i++)
+		mlxsw_reg_smid_port_mask_set(smid_pl, i, 1);
+
+	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(smid), smid_pl);
+	kfree(smid_pl);
+	return err;
+}
+
+static struct mlxsw_sp_mid *
+mlxsw_sp_mid_entry_create(struct mlxsw_sp *mlxsw_sp, const unsigned char *addr,
+			  u16 fid)
+{
+	struct mlxsw_sp_mid *mid;
+	int err;
+
+	mid = mlxsw_sp_mid_entry_alloc(mlxsw_sp, addr, fid);
+	if (IS_ERR(mid))
+		return ERR_CAST(mid);
+
+	/* Make sure we don't have garbage data in the device */
+	err = mlxsw_sp_mid_entry_clear(mlxsw_sp, mid->mid);
+	if (err)
+		goto err_mid_entry_clear;
+
+	return mid;
+
+err_mid_entry_clear:
+	mlxsw_sp_mid_entry_dealloc(mlxsw_sp, mid);
+	return ERR_PTR(err);
+}
+
+static void mlxsw_sp_mid_entry_destroy(struct mlxsw_sp *mlxsw_sp,
+				       struct mlxsw_sp_mid *mid)
+{
+	mlxsw_sp_mid_entry_dealloc(mlxsw_sp, mid);
+}
+
+static int mlxsw_sp_port_smid_set(struct mlxsw_sp_port *mlxsw_sp_port, u16 mid,
+				  bool adding)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	char *smid_pl;
+	int err;
+
+	smid_pl = kmalloc(MLXSW_REG_SMID_LEN, GFP_KERNEL);
+	if (!smid_pl)
+		return -ENOMEM;
+
+	mlxsw_reg_smid_pack(smid_pl, mid, mlxsw_sp_port->local_port, adding);
+
+	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(smid), smid_pl);
+	kfree(smid_pl);
+	return err;
+}
+
+static struct mlxsw_sp_mid *
+mlxsw_sp_port_mid_entry_get(struct mlxsw_sp_port *mlxsw_sp_port,
+			    const unsigned char *addr, u16 fid)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_mid *mid;
+	int err;
+
+	mid = mlxsw_sp_mid_entry_find(mlxsw_sp, addr, fid);
+	if (!mid) {
+		mid = mlxsw_sp_mid_entry_create(mlxsw_sp, addr, fid);
+		if (IS_ERR(mid))
+			return ERR_CAST(mid);
 	}
-	return 0;
+
+	err = mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, true);
+	if (err)
+		goto err_port_smid_set;
+
+	mid->ref_count++;
+
+	return mid;
+
+err_port_smid_set:
+	if (!mid->ref_count)
+		mlxsw_sp_mid_entry_destroy(mlxsw_sp, mid);
+	return ERR_PTR(err);
+}
+
+static void mlxsw_sp_port_mid_entry_put(struct mlxsw_sp_port *mlxsw_sp_port,
+					struct mlxsw_sp_mid *mid)
+{
+	mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, false);
+	if (--mid->ref_count == 0)
+		mlxsw_sp_mid_entry_destroy(mlxsw_sp_port->mlxsw_sp, mid);
 }
 
 static int mlxsw_sp_port_mdb_add(struct mlxsw_sp_port *mlxsw_sp_port,
 				 const struct switchdev_obj_port_mdb *mdb,
 				 struct switchdev_trans *trans)
 {
-	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	struct net_device *dev = mlxsw_sp_port->dev;
-	struct mlxsw_sp_mid *mid;
 	u16 fid = mlxsw_sp_port_vid_to_fid_get(mlxsw_sp_port, mdb->vid);
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_mid *mid;
 	int err = 0;
 
 	if (switchdev_trans_ph_prepare(trans))
 		return 0;
 
-	mid = __mlxsw_sp_mc_get(mlxsw_sp, mdb->addr, fid);
-	if (!mid) {
-		mid = __mlxsw_sp_mc_alloc(mlxsw_sp, mdb->addr, fid);
-		if (!mid) {
-			netdev_err(dev, "Unable to allocate MC group\n");
-			return -ENOMEM;
-		}
-	}
-	mid->ref_count++;
+	mid = mlxsw_sp_port_mid_entry_get(mlxsw_sp_port, mdb->addr, fid);
+	if (IS_ERR(mid))
+		return PTR_ERR(mid);
 
-	err = mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, true,
-				     mid->ref_count == 1);
-	if (err) {
-		netdev_err(dev, "Unable to set SMID\n");
-		goto err_out;
-	}
-
-	if (mid->ref_count == 1) {
-		err = mlxsw_sp_port_mdb_op(mlxsw_sp, mdb->addr, fid, mid->mid,
-					   true);
-		if (err) {
-			netdev_err(dev, "Unable to set MC SFD\n");
-			goto err_out;
-		}
-	}
+	err = mlxsw_sp_port_mdb_op(mlxsw_sp, mid, true);
+	if (err)
+		goto err_port_mdb_op;
 
 	return 0;
 
-err_out:
-	__mlxsw_sp_mc_dec_ref(mlxsw_sp, mid);
+err_port_mdb_op:
+	mlxsw_sp_port_mid_entry_put(mlxsw_sp_port, mid);
 	return err;
 }
 
@@ -1123,20 +1183,17 @@ mlxsw_sp_port_fdb_static_del(struct mlxsw_sp_port *mlxsw_sp_port,
 static void mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
 				  const struct switchdev_obj_port_mdb *mdb)
 {
+	u16 fid = mlxsw_sp_port_vid_to_fid_get(mlxsw_sp_port, mdb->vid);
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	struct mlxsw_sp_mid *mid;
-	u16 fid = mlxsw_sp_port_vid_to_fid_get(mlxsw_sp_port, mdb->vid);
-	u16 mid_idx;
 
-	mid = __mlxsw_sp_mc_get(mlxsw_sp, mdb->addr, fid);
+	mid = mlxsw_sp_mid_entry_find(mlxsw_sp, mdb->addr, fid);
 	if (!mid)
 		return;
 
-	mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, false, false);
+	mlxsw_sp_port_mdb_op(mlxsw_sp, mid, false);
 
-	mid_idx = mid->mid;
-	if (__mlxsw_sp_mc_dec_ref(mlxsw_sp, mid))
-		mlxsw_sp_port_mdb_op(mlxsw_sp, mdb->addr, fid, mid_idx, false);
+	mlxsw_sp_port_mid_entry_put(mlxsw_sp_port, mid);
 }
 
 static int mlxsw_sp_port_obj_del(struct net_device *dev,
