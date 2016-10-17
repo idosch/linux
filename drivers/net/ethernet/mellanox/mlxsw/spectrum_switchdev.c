@@ -1120,35 +1120,23 @@ mlxsw_sp_port_fdb_static_del(struct mlxsw_sp_port *mlxsw_sp_port,
 						   false, false);
 }
 
-static int mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
-				 const struct switchdev_obj_port_mdb *mdb)
+static void mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
+				  const struct switchdev_obj_port_mdb *mdb)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	struct net_device *dev = mlxsw_sp_port->dev;
 	struct mlxsw_sp_mid *mid;
 	u16 fid = mlxsw_sp_port_vid_to_fid_get(mlxsw_sp_port, mdb->vid);
 	u16 mid_idx;
-	int err = 0;
 
 	mid = __mlxsw_sp_mc_get(mlxsw_sp, mdb->addr, fid);
-	if (!mid) {
-		netdev_err(dev, "Unable to remove port from MC DB\n");
-		return -EINVAL;
-	}
+	if (!mid)
+		return;
 
-	err = mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, false, false);
-	if (err)
-		netdev_err(dev, "Unable to remove port from SMID\n");
+	mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, false, false);
 
 	mid_idx = mid->mid;
-	if (__mlxsw_sp_mc_dec_ref(mlxsw_sp, mid)) {
-		err = mlxsw_sp_port_mdb_op(mlxsw_sp, mdb->addr, fid, mid_idx,
-					   false);
-		if (err)
-			netdev_err(dev, "Unable to remove MC SFD\n");
-	}
-
-	return err;
+	if (__mlxsw_sp_mc_dec_ref(mlxsw_sp, mid))
+		mlxsw_sp_port_mdb_op(mlxsw_sp, mdb->addr, fid, mid_idx, false);
 }
 
 static int mlxsw_sp_port_obj_del(struct net_device *dev,
@@ -1174,8 +1162,8 @@ static int mlxsw_sp_port_obj_del(struct net_device *dev,
 						   SWITCHDEV_OBJ_PORT_FDB(obj));
 		break;
 	case SWITCHDEV_OBJ_ID_PORT_MDB:
-		err = mlxsw_sp_port_mdb_del(mlxsw_sp_port,
-					    SWITCHDEV_OBJ_PORT_MDB(obj));
+		mlxsw_sp_port_mdb_del(mlxsw_sp_port,
+				      SWITCHDEV_OBJ_PORT_MDB(obj));
 		break;
 	default:
 		err = -EOPNOTSUPP;
