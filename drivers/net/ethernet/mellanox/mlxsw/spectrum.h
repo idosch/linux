@@ -113,10 +113,10 @@ struct mlxsw_sp_rif {
 
 struct mlxsw_sp_mid {
 	struct list_head list;
+	struct list_head ports;
 	unsigned char addr[ETH_ALEN];
 	u16 fid;
 	u16 mid;
-	unsigned int ref_count;
 };
 
 static inline u16 mlxsw_sp_vfid_to_fid(u16 vfid)

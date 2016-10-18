@@ -52,6 +52,12 @@
 #include "core.h"
 #include "reg.h"
 
+struct mlxsw_sp_mid_group {
+	struct list_head port_node;
+	struct mlxsw_sp_mid *mid;
+	struct mlxsw_sp_port *port;
+};
+
 static u16 mlxsw_sp_port_vid_to_fid_get(struct mlxsw_sp_port *mlxsw_sp_port,
 					u16 vid)
 {
@@ -890,7 +896,7 @@ static int mlxsw_sp_port_mdb_op(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	/* MDB entry already exists, we just changed the port list */
-	if (mid->ref_count != 1)
+	if (list_is_singular(&mid->ports))
 		return 0;
 
 	sfd_pl = kmalloc(MLXSW_REG_SFD_LEN, GFP_KERNEL);
@@ -939,6 +945,7 @@ static struct mlxsw_sp_mid *mlxsw_sp_mid_entry_alloc(struct mlxsw_sp *mlxsw_sp,
 	mid->fid = fid;
 	mid->mid = mid_idx;
 	list_add_tail(&mid->list, &mlxsw_sp->br_mids.list);
+	INIT_LIST_HEAD(&mid->ports);
 
 	return mid;
 }
@@ -998,6 +1005,40 @@ static void mlxsw_sp_mid_entry_destroy(struct mlxsw_sp *mlxsw_sp,
 	mlxsw_sp_mid_entry_dealloc(mlxsw_sp, mid);
 }
 
+static struct mlxsw_sp_mid_group *
+mlxsw_sp_mid_group_find(const struct mlxsw_sp_mid *mid,
+			const struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp_mid_group *mg;
+
+	list_for_each_entry(mg, &mid->ports, port_node)
+		if (mg->port == mlxsw_sp_port)
+			return mg;
+
+	return NULL;
+}
+
+static struct mlxsw_sp_mid_group *
+mlxsw_sp_mid_group_alloc(struct mlxsw_sp_mid *mid)
+{
+	struct mlxsw_sp_mid_group *mg;
+
+	mg = kzalloc(sizeof(*mg), GFP_KERNEL);
+	if (!mg)
+		return NULL;
+
+	list_add(&mg->port_node, &mid->ports);
+	mg->mid = mid;
+
+	return mg;
+}
+
+static void mlxsw_sp_mid_group_dealloc(struct mlxsw_sp_mid_group *mg)
+{
+	list_del(&mg->port_node);
+	kfree(mg);
+}
+
 static int mlxsw_sp_port_smid_set(struct mlxsw_sp_port *mlxsw_sp_port, u16 mid,
 				  bool adding)
 {
@@ -1016,6 +1057,40 @@ static int mlxsw_sp_port_smid_set(struct mlxsw_sp_port *mlxsw_sp_port, u16 mid,
 	return err;
 }
 
+static int mlxsw_sp_port_mid_group_join(struct mlxsw_sp_port *mlxsw_sp_port,
+					struct mlxsw_sp_mid *mid)
+{
+	struct mlxsw_sp_mid_group *mg;
+	int err;
+
+	mg = mlxsw_sp_mid_group_find(mid, mlxsw_sp_port);
+	if (mg)
+		return 0;
+
+	mg = mlxsw_sp_mid_group_alloc(mid);
+	if (!mg)
+		return -ENOMEM;
+
+	err = mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, true);
+	if (err)
+		goto err_port_smid_set;
+
+	mg->port = mlxsw_sp_port;
+
+	return 0;
+
+err_port_smid_set:
+	mlxsw_sp_mid_group_dealloc(mg);
+	return err;
+}
+
+static void mlxsw_sp_port_mid_group_leave(struct mlxsw_sp_port *mlxsw_sp_port,
+					  struct mlxsw_sp_mid_group *mg)
+{
+	mlxsw_sp_port_smid_set(mlxsw_sp_port, mg->mid->mid, false);
+	mlxsw_sp_mid_group_dealloc(mg);
+}
+
 static struct mlxsw_sp_mid *
 mlxsw_sp_port_mid_entry_get(struct mlxsw_sp_port *mlxsw_sp_port,
 			    const unsigned char *addr, u16 fid)
@@ -1031,16 +1106,14 @@ mlxsw_sp_port_mid_entry_get(struct mlxsw_sp_port *mlxsw_sp_port,
 			return ERR_CAST(mid);
 	}
 
-	err = mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, true);
+	err = mlxsw_sp_port_mid_group_join(mlxsw_sp_port, mid);
 	if (err)
-		goto err_port_smid_set;
-
-	mid->ref_count++;
+		goto err_port_mid_group_join;
 
 	return mid;
 
-err_port_smid_set:
-	if (!mid->ref_count)
+err_port_mid_group_join:
+	if (list_empty(&mid->ports))
 		mlxsw_sp_mid_entry_destroy(mlxsw_sp, mid);
 	return ERR_PTR(err);
 }
@@ -1048,8 +1121,14 @@ err_port_smid_set:
 static void mlxsw_sp_port_mid_entry_put(struct mlxsw_sp_port *mlxsw_sp_port,
 					struct mlxsw_sp_mid *mid)
 {
-	mlxsw_sp_port_smid_set(mlxsw_sp_port, mid->mid, false);
-	if (--mid->ref_count == 0)
+	struct mlxsw_sp_mid_group *mg;
+
+	mg = mlxsw_sp_mid_group_find(mid, mlxsw_sp_port);
+	if (!mg)
+		return;
+
+	mlxsw_sp_port_mid_group_leave(mlxsw_sp_port, mg);
+	if (list_empty(&mid->ports))
 		mlxsw_sp_mid_entry_destroy(mlxsw_sp_port->mlxsw_sp, mid);
 }
 
