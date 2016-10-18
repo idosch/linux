@@ -1040,6 +1040,7 @@ mlxsw_sp_port_vport_create(struct mlxsw_sp_port *mlxsw_sp_port,
 	mlxsw_sp_vport->lagged = mlxsw_sp_port->lagged;
 	mlxsw_sp_vport->lag_id = mlxsw_sp_port->lag_id;
 	mlxsw_sp_vport->vport.vid = vid;
+	INIT_LIST_HEAD(&mlxsw_sp_vport->mg_list);
 
 	list_add(&mlxsw_sp_vport->vport.list, &mlxsw_sp_port->vports_list);
 
@@ -1049,6 +1050,7 @@ mlxsw_sp_port_vport_create(struct mlxsw_sp_port *mlxsw_sp_port,
 static void mlxsw_sp_port_vport_destroy(struct mlxsw_sp_port *mlxsw_sp_vport)
 {
 	list_del(&mlxsw_sp_vport->vport.list);
+	WARN_ON(!list_empty(&mlxsw_sp_vport->mg_list));
 	kfree(mlxsw_sp_vport);
 }
 
@@ -4441,6 +4443,8 @@ static void mlxsw_sp_vport_vfid_leave(struct mlxsw_sp_port *mlxsw_sp_vport)
 	mlxsw_sp_vport_flood_set(mlxsw_sp_vport, f->fid, false);
 
 	mlxsw_sp_port_fdb_flush(mlxsw_sp_vport, f->fid);
+
+	mlxsw_sp_port_mdb_flush(mlxsw_sp_vport, f->fid);
 
 	mlxsw_sp_vport_fid_set(mlxsw_sp_vport, NULL);
 	if (--f->ref_count == 0)

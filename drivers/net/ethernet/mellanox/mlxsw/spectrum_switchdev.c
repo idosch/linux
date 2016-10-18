@@ -54,6 +54,7 @@
 
 struct mlxsw_sp_mid_group {
 	struct list_head port_node;
+	struct list_head mg_list_node;
 	struct mlxsw_sp_mid *mid;
 	struct mlxsw_sp_port *port;
 };
@@ -528,6 +529,8 @@ static void __mlxsw_sp_port_fid_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 	netdev_dbg(mlxsw_sp_port->dev, "Left FID=%d\n", fid);
 
 	mlxsw_sp_port_fdb_flush(mlxsw_sp_port, fid);
+
+	mlxsw_sp_port_mdb_flush(mlxsw_sp_port, fid);
 
 	if (--f->ref_count == 0)
 		mlxsw_sp_fid_destroy(mlxsw_sp_port->mlxsw_sp, f);
@@ -1075,6 +1078,7 @@ static int mlxsw_sp_port_mid_group_join(struct mlxsw_sp_port *mlxsw_sp_port,
 	if (err)
 		goto err_port_smid_set;
 
+	list_add(&mg->mg_list_node, &mlxsw_sp_port->mg_list);
 	mg->port = mlxsw_sp_port;
 
 	return 0;
@@ -1087,6 +1091,7 @@ err_port_smid_set:
 static void mlxsw_sp_port_mid_group_leave(struct mlxsw_sp_port *mlxsw_sp_port,
 					  struct mlxsw_sp_mid_group *mg)
 {
+	list_del(&mg->mg_list_node);
 	mlxsw_sp_port_smid_set(mlxsw_sp_port, mg->mid->mid, false);
 	mlxsw_sp_mid_group_dealloc(mg);
 }
@@ -1259,6 +1264,25 @@ mlxsw_sp_port_fdb_static_del(struct mlxsw_sp_port *mlxsw_sp_port,
 						   false, false);
 }
 
+static void __mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
+				    struct mlxsw_sp_mid *mid)
+{
+	mlxsw_sp_port_mdb_op(mlxsw_sp_port->mlxsw_sp, mid, false);
+	mlxsw_sp_port_mid_entry_put(mlxsw_sp_port, mid);
+}
+
+void mlxsw_sp_port_mdb_flush(struct mlxsw_sp_port *mlxsw_sp_port, u16 fid)
+{
+	struct mlxsw_sp_mid_group *mg, *tmp;
+
+	list_for_each_entry_safe(mg, tmp, &mlxsw_sp_port->mg_list,
+				 mg_list_node) {
+		if (mg->mid->fid != fid)
+			continue;
+		__mlxsw_sp_port_mdb_del(mlxsw_sp_port, mg->mid);
+	}
+}
+
 static void mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
 				  const struct switchdev_obj_port_mdb *mdb)
 {
@@ -1270,9 +1294,7 @@ static void mlxsw_sp_port_mdb_del(struct mlxsw_sp_port *mlxsw_sp_port,
 	if (!mid)
 		return;
 
-	mlxsw_sp_port_mdb_op(mlxsw_sp, mid, false);
-
-	mlxsw_sp_port_mid_entry_put(mlxsw_sp_port, mid);
+	__mlxsw_sp_port_mdb_del(mlxsw_sp_port, mid);
 }
 
 static int mlxsw_sp_port_obj_del(struct net_device *dev,
@@ -1712,8 +1734,10 @@ void mlxsw_sp_switchdev_fini(struct mlxsw_sp *mlxsw_sp)
 void mlxsw_sp_port_switchdev_init(struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	mlxsw_sp_port->dev->switchdev_ops = &mlxsw_sp_port_switchdev_ops;
+	INIT_LIST_HEAD(&mlxsw_sp_port->mg_list);
 }
 
 void mlxsw_sp_port_switchdev_fini(struct mlxsw_sp_port *mlxsw_sp_port)
 {
+	WARN_ON(!list_empty(&mlxsw_sp_port->mg_list));
 }

@@ -356,6 +356,7 @@ struct mlxsw_sp_port {
 	struct list_head vports_list;
 	/* TC handles */
 	struct list_head mall_tc_list;
+	struct list_head mg_list;
 	struct {
 		#define MLXSW_HW_STATS_UPDATE_TIME HZ
 		struct rtnl_link_stats64 *cache;
@@ -531,6 +532,7 @@ int mlxsw_sp_sb_occ_tc_port_bind_get(struct mlxsw_core_port *mlxsw_core_port,
 int mlxsw_sp_switchdev_init(struct mlxsw_sp *mlxsw_sp);
 void mlxsw_sp_switchdev_fini(struct mlxsw_sp *mlxsw_sp);
 int mlxsw_sp_port_vlan_init(struct mlxsw_sp_port *mlxsw_sp_port);
+void mlxsw_sp_port_mdb_flush(struct mlxsw_sp_port *mlxsw_sp_port, u16 fid);
 void mlxsw_sp_port_switchdev_init(struct mlxsw_sp_port *mlxsw_sp_port);
 void mlxsw_sp_port_switchdev_fini(struct mlxsw_sp_port *mlxsw_sp_port);
 int mlxsw_sp_port_vid_to_fid_set(struct mlxsw_sp_port *mlxsw_sp_port,
