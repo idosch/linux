@@ -43,6 +43,43 @@ int nbp_switchdev_mark_set(struct net_bridge_port *p)
 	return 0;
 }
 
+int br_port_get_offload_fwd_mark(const struct net_device *dev)
+{
+	struct net_bridge_port *p;
+
+	ASSERT_RTNL();
+
+	if (!netif_is_bridge_port(dev))
+		return -EINVAL;
+
+	p = br_port_get_rtnl(dev);
+	return p->offload_fwd_mark;
+}
+EXPORT_SYMBOL_GPL(br_port_get_offload_fwd_mark);
+
+int br_port_set_offload_fwd_mark(const struct net_device *br_dev,
+				 struct net_device *dev,
+				 int offload_fwd_mark)
+{
+	struct net_bridge_port *p;
+	struct net_bridge *br;
+
+	ASSERT_RTNL();
+
+	if (!netif_is_bridge_master(br_dev) || !netif_is_bridge_port(dev))
+		return -EINVAL;
+
+	br = netdev_priv(br_dev);
+	p = br_port_get_rtnl(dev);
+
+	if (WARN_ON(offload_fwd_mark > br->offload_fwd_mark))
+		return -EINVAL;
+
+	p->offload_fwd_mark = offload_fwd_mark;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(br_port_set_offload_fwd_mark);
+
 void nbp_switchdev_frame_mark(const struct net_bridge_port *p,
 			      struct sk_buff *skb)
 {

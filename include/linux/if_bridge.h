@@ -129,4 +129,25 @@ br_fdb_find_port(const struct net_device *br_dev,
 }
 #endif
 
+#ifdef CONFIG_NET_SWITCHDEV
+int br_port_get_offload_fwd_mark(const struct net_device *dev);
+int br_port_set_offload_fwd_mark(const struct net_device *br_dev,
+				 struct net_device *dev,
+				 int offload_fwd_mark);
+#else
+static inline
+int br_port_get_offload_fwd_mark(const struct net_device *dev)
+{
+	return -EINVAL;
+}
+static inline
+int br_port_set_offload_fwd_mark(const struct net_device *br_dev,
+				 struct net_device *dev,
+				 int offload_fwd_mark)
+{
+	return -EINVAL;
+}
+
+#endif
+
 #endif
