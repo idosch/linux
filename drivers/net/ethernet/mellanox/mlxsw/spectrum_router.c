@@ -7678,6 +7678,62 @@ const struct mlxsw_sp_rif_ops *mlxsw_sp2_rif_ops_arr[] = {
 	[MLXSW_SP_RIF_TYPE_IPIP_LB]	= &mlxsw_sp2_rif_ipip_lb_ops,
 };
 
+static bool mlxsw_sp_router_idev6_has_ip(struct inet6_dev *inet6_dev)
+{
+	bool has_ip = false;
+
+	read_lock_bh(&inet6_dev->lock);
+	if (list_empty(&inet6_dev->addr_list))
+		goto out;
+	if (list_is_singular(&inet6_dev->addr_list)) {
+		struct inet6_ifaddr *ifp;
+
+		ifp = list_first_entry(&inet6_dev->addr_list,
+				       struct inet6_ifaddr, if_list);
+		if (ifp->scope == IFA_LINK)
+			goto out;
+	}
+	has_ip = true;
+out:
+	read_unlock_bh(&inet6_dev->lock);
+	return has_ip;
+}
+
+static bool mlxsw_sp_router_netdev_has_ip(const struct net_device *dev)
+{
+	struct inet6_dev *inet6_dev;
+	struct in_device *idev;
+
+	ASSERT_RTNL();
+
+	idev = __in_dev_get_rtnl(dev);
+	if (idev && idev->ifa_list)
+		return true;
+
+	inet6_dev = __in6_dev_get(dev);
+	if (!inet6_dev)
+		return false;
+
+	/* Do not configure a RIF if device has a single link-local address */
+	return mlxsw_sp_router_idev6_has_ip(inet6_dev);
+
+}
+
+void mlxsw_sp_router_netdev_sync(struct mlxsw_sp *mlxsw_sp,
+				 struct net_device *dev,
+				 struct netlink_ext_ack *extack)
+{
+	ASSERT_RTNL();
+
+	if (!mlxsw_sp_router_netdev_has_ip(dev))
+		return;
+
+	if (__mlxsw_sp_inetaddr_event(mlxsw_sp, dev, NETDEV_UP, extack))
+		return;
+
+	netdev_cycle(dev, extack);
+}
+
 static int mlxsw_sp_rifs_init(struct mlxsw_sp *mlxsw_sp)
 {
 	u64 max_rifs = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS);

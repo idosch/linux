@@ -510,6 +510,9 @@ int mlxsw_sp_router_tb_id_vr_id(struct mlxsw_sp *mlxsw_sp, u32 tb_id,
 int mlxsw_sp_router_ul_rif_get(struct mlxsw_sp *mlxsw_sp, u32 ul_tb_id,
 			       u16 *ul_rif_index);
 void mlxsw_sp_router_ul_rif_put(struct mlxsw_sp *mlxsw_sp, u16 ul_rif_index);
+void mlxsw_sp_router_netdev_sync(struct mlxsw_sp *mlxsw_sp,
+				 struct net_device *dev,
+				 struct netlink_ext_ack *extack);
 
 /* spectrum_kvdl.c */
 enum mlxsw_sp_kvdl_entry_type {
