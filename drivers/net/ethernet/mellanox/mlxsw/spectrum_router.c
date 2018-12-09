@@ -6547,9 +6547,9 @@ static int mlxsw_sp_inetaddr_port_event(struct net_device *port_dev,
 					unsigned long event,
 					struct netlink_ext_ack *extack)
 {
-	if (netif_is_bridge_port(port_dev) ||
-	    netif_is_lag_port(port_dev) ||
-	    netif_is_ovs_port(port_dev))
+	if (netdev_master_upper_dev_get(port_dev) &&
+	    (netif_is_bridge_port(port_dev) || netif_is_lag_port(port_dev) ||
+	     netif_is_ovs_port(port_dev)))
 		return 0;
 
 	return mlxsw_sp_inetaddr_port_vlan_event(port_dev, port_dev, event,
@@ -6583,7 +6583,8 @@ static int mlxsw_sp_inetaddr_lag_event(struct net_device *lag_dev,
 				       unsigned long event,
 				       struct netlink_ext_ack *extack)
 {
-	if (netif_is_bridge_port(lag_dev))
+	if (netdev_master_upper_dev_get(lag_dev) &&
+	    netif_is_bridge_port(lag_dev))
 		return 0;
 
 	return __mlxsw_sp_inetaddr_lag_event(lag_dev, lag_dev, event,
@@ -6623,7 +6624,8 @@ static int mlxsw_sp_inetaddr_vlan_event(struct mlxsw_sp *mlxsw_sp,
 	struct net_device *real_dev = vlan_dev_real_dev(vlan_dev);
 	u16 vid = vlan_dev_vlan_id(vlan_dev);
 
-	if (netif_is_bridge_port(vlan_dev))
+	if (netdev_master_upper_dev_get(vlan_dev) &&
+	    netif_is_bridge_port(vlan_dev))
 		return 0;
 
 	if (mlxsw_sp_port_dev_check(real_dev))
