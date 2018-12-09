@@ -26,6 +26,11 @@ ALL_TESTS="
 	lag_dev_deletion_test
 	vlan_interface_uppers_test
 	bridge_extern_learn_test
+	bridge_slave_routes_sync_test
+	bridge_routes_sync_test
+	lag_slave_routes_sync_test
+	lag_routes_sync_test
+	vrf_slave_routes_sync_test
 	devlink_reload_test
 "
 NUM_NETIFS=2
@@ -559,6 +564,211 @@ bridge_extern_learn_test()
 	log_test "externally learned fdb entry"
 
 	ip link del dev br0
+}
+
+bridge_slave_routes_sync_test()
+{
+	# Test that prefix routes configured on the bridge slave prior to its
+	# unlinking from the bridge are offloaded when it is unlinked
+	RET=0
+
+	ip link add name br0 up type bridge vlan_filtering 1
+
+	ip link set dev $swp1 up
+	sysctl_set net.ipv4.conf.$swp1.ignore_routes_with_linkdown 0
+	sysctl_set net.ipv6.conf.$swp1.keep_addr_on_down 1
+
+	ip -4 address add 192.0.2.1/24 dev $swp1
+	ip -6 address add 2001:db8:1::1/64 dev $swp1
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded prior to enslavement to bridge"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded prior to enslavement to bridge"
+
+	ip link set dev $swp1 master br0
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_fail $? "ipv4 prefix route offloaded when enslaved to bridge"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 2>&1 | grep -q offload
+	check_fail $? "ipv6 prefix route offloaded when enslaved to bridge"
+
+	ip link set dev $swp1 nomaster
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded after unlinked from bridge"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded after unlinked from bridge"
+
+	log_test "bridge slave routes sync"
+
+	ip link set dev $swp1 down
+
+	ip -6 address del 2001:db8:1::1/64 dev $swp1
+	ip -4 address del 192.0.2.1/24 dev $swp1
+
+	sysctl_restore net.ipv6.conf.$swp1.keep_addr_on_down
+	sysctl_restore net.ipv4.conf.$swp1.ignore_routes_with_linkdown
+
+	ip link del dev br0
+}
+
+bridge_routes_sync_test()
+{
+	# Test that prefix routes configured on the bridge prior to its offload
+	# are offloaded to the device when a port is enslaved to it
+	RET=0
+
+	ip link add name br0 up type bridge vlan_filtering 1
+	sysctl_set net.ipv4.conf.br0.ignore_routes_with_linkdown 0
+	sysctl_set net.ipv6.conf.br0.keep_addr_on_down 1
+
+	ip -4 address add 192.0.2.1/24 dev br0
+	ip -6 address add 2001:db8:1::1/64 dev br0
+
+	ip link set dev $swp1 master br0
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev br0 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded when should"
+	ip -6 route get fibmatch 2001:db8:1::2 dev br0 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded when should"
+
+	log_test "bridge routes sync"
+
+	ip link del dev br0
+}
+
+lag_slave_routes_sync_test()
+{
+	# Test that prefix routes configured on the LAG slave prior to its
+	# unlinking from the LAG are offloaded when it is unlinked
+	RET=0
+
+	ip link add name bond1 up type bond mode 802.3ad
+
+	ip link set dev $swp1 up
+	sysctl_set net.ipv4.conf.$swp1.ignore_routes_with_linkdown 0
+	sysctl_set net.ipv6.conf.$swp1.keep_addr_on_down 1
+
+	ip -4 address add 192.0.2.1/24 dev $swp1
+	ip -6 address add 2001:db8:1::1/64 dev $swp1
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded prior to enslavement to lag"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded prior to enslavement to lag"
+
+	ip link set dev $swp1 down
+	ip link set dev $swp1 master bond1
+	ip link set dev $swp1 up
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_fail $? "ipv4 prefix route offloaded when enslaved to lag"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 2>&1 | grep -q offload
+	check_fail $? "ipv6 prefix route offloaded when enslaved to lag"
+
+	ip link set dev $swp1 nomaster
+	ip link set dev $swp1 up
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded after unlinked from lag"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded after unlinked from lag"
+
+	log_test "lag slave routes sync"
+
+	ip link set dev $swp1 down
+
+	ip -6 address del 2001:db8:1::1/64 dev $swp1
+	ip -4 address del 192.0.2.1/24 dev $swp1
+
+	sysctl_restore net.ipv6.conf.$swp1.keep_addr_on_down
+	sysctl_restore net.ipv4.conf.$swp1.ignore_routes_with_linkdown
+
+	ip link del dev bond1
+}
+
+lag_routes_sync_test()
+{
+	# Test that prefix routes configured on the lag prior to its offload
+	# are offloaded to the device when a port is enslaved to it
+	RET=0
+
+	ip link add name bond1 up type bond mode 802.3ad
+	sysctl_set net.ipv4.conf.bond1.ignore_routes_with_linkdown 0
+	sysctl_set net.ipv6.conf.bond1.keep_addr_on_down 1
+
+	ip -4 address add 192.0.2.1/24 dev bond1
+	ip -6 address add 2001:db8:1::1/64 dev bond1
+
+	ip link set dev $swp1 master bond1
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev bond1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded when should"
+	ip -6 route get fibmatch 2001:db8:1::2 dev bond1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded when should"
+
+	log_test "lag routes sync"
+
+	ip link del dev bond1
+}
+
+vrf_slave_routes_sync_test()
+{
+	# Test that prefix routes configured on the VRF slave are offloaded
+	# when it is unlinked
+	RET=0
+
+	ip link add name vrf-test up type vrf table 10
+
+	ip link set dev $swp1 up
+	sysctl_set net.ipv4.conf.$swp1.ignore_routes_with_linkdown 0
+	sysctl_set net.ipv6.conf.$swp1.keep_addr_on_down 1
+
+	ip -4 address add 192.0.2.1/24 dev $swp1
+	ip -6 address add 2001:db8:1::1/64 dev $swp1
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded prior to enslavement to vrf"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded prior to enslavement to vrf"
+
+	ip link set dev $swp1 master vrf-test
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded when enslaved to vrf"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 2>&1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded when enslaved to vrf"
+
+	ip link set dev $swp1 nomaster
+	sleep 1
+
+	ip -4 route get fibmatch 192.0.2.2 dev $swp1 | grep -q offload
+	check_err $? "ipv4 prefix route not offloaded after unlinked from vrf"
+	ip -6 route get fibmatch 2001:db8:1::2 dev $swp1 | grep -q offload
+	check_err $? "ipv6 prefix route not offloaded after unlinked from vrf"
+
+	log_test "vrf slave routes sync"
+
+	ip link set dev $swp1 down
+
+	ip -6 address del 2001:db8:1::1/64 dev $swp1
+	ip -4 address del 192.0.2.1/24 dev $swp1
+
+	sysctl_restore net.ipv6.conf.$swp1.keep_addr_on_down
+	sysctl_restore net.ipv4.conf.$swp1.ignore_routes_with_linkdown
+
+	ip link del dev vrf-test
 }
 
 devlink_reload_test()
