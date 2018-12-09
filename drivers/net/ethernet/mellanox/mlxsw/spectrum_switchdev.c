@@ -185,6 +185,8 @@ mlxsw_sp_bridge_device_create(struct mlxsw_sp_bridge *bridge,
 	INIT_LIST_HEAD(&bridge_device->mids_list);
 	list_add(&bridge_device->list, &bridge->bridges_list);
 
+	mlxsw_sp_router_netdev_sync(bridge->mlxsw_sp, br_dev, extack);
+
 	return bridge_device;
 }
 
