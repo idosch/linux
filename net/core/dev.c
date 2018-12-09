@@ -7322,6 +7322,36 @@ void netdev_lower_state_changed(struct net_device *lower_dev,
 }
 EXPORT_SYMBOL(netdev_lower_state_changed);
 
+/**
+ * netdev_cycle - Emulate netdev going down and up
+ * @dev: device
+ * @extack: netlink extended ack
+ *
+ * Emulate netdev going down and up by clearing and setting IFF_UP. Can be used
+ * to flushh neighbor cache and move routes across tables.
+ */
+void netdev_cycle(struct net_device *dev, struct netlink_ext_ack *extack)
+{
+	unsigned int flags = dev->flags;
+	int ret;
+
+	ASSERT_RTNL();
+
+	if (!netif_running(dev))
+		return;
+
+	ret = dev_change_flags(dev, flags & ~IFF_UP, extack);
+	if (ret >= 0)
+		ret = dev_change_flags(dev, flags, extack);
+
+	if (ret < 0) {
+		netdev_err(dev,
+			   "Failed to cycle device %s; route tables might be wrong!\n",
+			   dev->name);
+	}
+}
+EXPORT_SYMBOL(netdev_cycle);
+
 static void dev_change_rx_flags(struct net_device *dev, int flags)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;

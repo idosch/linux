@@ -746,27 +746,6 @@ static int vrf_rtable_create(struct net_device *dev)
 
 /**************************** device handling ********************/
 
-/* cycle interface to flush neighbor cache and move routes across tables */
-static void cycle_netdev(struct net_device *dev,
-			 struct netlink_ext_ack *extack)
-{
-	unsigned int flags = dev->flags;
-	int ret;
-
-	if (!netif_running(dev))
-		return;
-
-	ret = dev_change_flags(dev, flags & ~IFF_UP, extack);
-	if (ret >= 0)
-		ret = dev_change_flags(dev, flags, extack);
-
-	if (ret < 0) {
-		netdev_err(dev,
-			   "Failed to cycle device %s; route tables might be wrong!\n",
-			   dev->name);
-	}
-}
-
 static int do_vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 			    struct netlink_ext_ack *extack)
 {
@@ -786,7 +765,7 @@ static int do_vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 	if (ret < 0)
 		goto err;
 
-	cycle_netdev(port_dev, extack);
+	netdev_cycle(port_dev, extack);
 
 	return 0;
 
@@ -816,7 +795,7 @@ static int do_vrf_del_slave(struct net_device *dev, struct net_device *port_dev)
 	netdev_upper_dev_unlink(port_dev, dev);
 	port_dev->priv_flags &= ~IFF_L3MDEV_SLAVE;
 
-	cycle_netdev(port_dev, NULL);
+	netdev_cycle(port_dev, NULL);
 
 	return 0;
 }
