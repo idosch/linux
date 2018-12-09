@@ -289,9 +289,19 @@ mlxsw_sp_bridge_port_create(struct mlxsw_sp_bridge_device *bridge_device,
 static void
 mlxsw_sp_bridge_port_destroy(struct mlxsw_sp_bridge_port *bridge_port)
 {
+	struct net_device *brport_dev = bridge_port->dev;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_lower_get(brport_dev);
+
 	list_del(&bridge_port->list);
 	WARN_ON(!list_empty(&bridge_port->vlans_list));
 	kfree(bridge_port);
+	/* It is possible that this function was invoked because the last mlxsw
+	 * netdev was unlinked from a bridged LAG device which is no longer our
+	 * upper
+	 */
+	if (!mlxsw_sp)
+		return;
+	mlxsw_sp_router_netdev_sync(mlxsw_sp, brport_dev, NULL);
 }
 
 static struct mlxsw_sp_bridge_port *
