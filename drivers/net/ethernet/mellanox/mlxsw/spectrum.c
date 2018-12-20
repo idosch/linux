@@ -2313,135 +2313,12 @@ struct mlxsw_sp_port_link_mode {
 };
 
 static const struct mlxsw_sp_port_link_mode mlxsw_sp_port_link_mode[] = {
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100BASE_T,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_100baseT_Full_BIT,
-		.speed		= SPEED_100,
-	},
+	/* Support only 1G speed for Spectrum-2 bring-up */
 	{
 		.mask		= MLXSW_REG_PTYS_ETH_SPEED_SGMII |
 				  MLXSW_REG_PTYS_ETH_SPEED_1000BASE_KX,
 		.mask_ethtool	= ETHTOOL_LINK_MODE_1000baseKX_Full_BIT,
 		.speed		= SPEED_1000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_10GBASE_T,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_10000baseT_Full_BIT,
-		.speed		= SPEED_10000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_10GBASE_CX4 |
-				  MLXSW_REG_PTYS_ETH_SPEED_10GBASE_KX4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_10000baseKX4_Full_BIT,
-		.speed		= SPEED_10000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_10GBASE_KR |
-				  MLXSW_REG_PTYS_ETH_SPEED_10GBASE_CR |
-				  MLXSW_REG_PTYS_ETH_SPEED_10GBASE_SR |
-				  MLXSW_REG_PTYS_ETH_SPEED_10GBASE_ER_LR,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_10000baseKR_Full_BIT,
-		.speed		= SPEED_10000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_20GBASE_KR2,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_20000baseKR2_Full_BIT,
-		.speed		= SPEED_20000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_40GBASE_CR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_40000baseCR4_Full_BIT,
-		.speed		= SPEED_40000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_40GBASE_KR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_40000baseKR4_Full_BIT,
-		.speed		= SPEED_40000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_40GBASE_SR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_40000baseSR4_Full_BIT,
-		.speed		= SPEED_40000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_40GBASE_LR4_ER4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_40000baseLR4_Full_BIT,
-		.speed		= SPEED_40000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_25GBASE_CR,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_25000baseCR_Full_BIT,
-		.speed		= SPEED_25000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_25GBASE_KR,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_25000baseKR_Full_BIT,
-		.speed		= SPEED_25000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_25GBASE_SR,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_25000baseSR_Full_BIT,
-		.speed		= SPEED_25000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_25GBASE_SR,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_25000baseSR_Full_BIT,
-		.speed		= SPEED_25000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_50GBASE_CR2,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_50000baseCR2_Full_BIT,
-		.speed		= SPEED_50000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_50GBASE_KR2,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_50000baseKR2_Full_BIT,
-		.speed		= SPEED_50000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_50GBASE_SR2,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_50000baseSR2_Full_BIT,
-		.speed		= SPEED_50000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_56GBASE_R4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_56000baseKR4_Full_BIT,
-		.speed		= SPEED_56000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_56GBASE_R4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_56000baseCR4_Full_BIT,
-		.speed		= SPEED_56000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_56GBASE_R4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_56000baseSR4_Full_BIT,
-		.speed		= SPEED_56000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_56GBASE_R4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_56000baseLR4_Full_BIT,
-		.speed		= SPEED_56000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100GBASE_CR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_100000baseCR4_Full_BIT,
-		.speed		= SPEED_100000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100GBASE_SR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_100000baseSR4_Full_BIT,
-		.speed		= SPEED_100000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100GBASE_KR4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_100000baseKR4_Full_BIT,
-		.speed		= SPEED_100000,
-	},
-	{
-		.mask		= MLXSW_REG_PTYS_ETH_SPEED_100GBASE_LR4_ER4,
-		.mask_ethtool	= ETHTOOL_LINK_MODE_100000baseLR4_ER4_Full_BIT,
-		.speed		= SPEED_100000,
 	},
 };
 
@@ -2644,7 +2521,7 @@ mlxsw_sp_port_set_link_ksettings(struct net_device *dev,
 		return err;
 	mlxsw_reg_ptys_eth_unpack(ptys_pl, &eth_proto_cap, NULL, NULL);
 
-	autoneg = cmd->base.autoneg == AUTONEG_ENABLE;
+	autoneg = AUTONEG_DISABLE;
 	eth_proto_new = autoneg ?
 		mlxsw_sp_to_ptys_advert_link(cmd) :
 		mlxsw_sp_to_ptys_speed(cmd->base.speed);
@@ -3034,7 +2911,7 @@ static int mlxsw_sp_port_create(struct mlxsw_sp *mlxsw_sp, u8 local_port,
 	mlxsw_sp_port->mapping.module = module;
 	mlxsw_sp_port->mapping.width = width;
 	mlxsw_sp_port->mapping.lane = lane;
-	mlxsw_sp_port->link.autoneg = 1;
+	mlxsw_sp_port->link.autoneg = 0;
 	INIT_LIST_HEAD(&mlxsw_sp_port->vlans_list);
 	INIT_LIST_HEAD(&mlxsw_sp_port->mall_tc_list);
 
