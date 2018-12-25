@@ -884,10 +884,12 @@ int mlxsw_sp_acl_init(struct mlxsw_sp *mlxsw_sp)
 		goto err_acl_ops_init;
 
 	/* Create the delayed work for the rule activity_update */
+	/*
 	INIT_DELAYED_WORK(&acl->rule_activity_update.dw,
 			  mlxsw_sp_acl_rul_activity_update_work);
 	acl->rule_activity_update.interval = MLXSW_SP_ACL_RULE_ACTIVITY_UPDATE_PERIOD_MS;
 	mlxsw_core_schedule_dw(&acl->rule_activity_update.dw, 0);
+	*/
 	return 0;
 
 err_acl_ops_init:
