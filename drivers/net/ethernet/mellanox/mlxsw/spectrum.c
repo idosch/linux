@@ -517,6 +517,9 @@ static int mlxsw_sp_port_admin_status_set(struct mlxsw_sp_port *mlxsw_sp_port,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	char paos_pl[MLXSW_REG_PAOS_LEN];
 
+	if (is_up == false)
+		return 0;
+
 	mlxsw_reg_paos_pack(paos_pl, mlxsw_sp_port->local_port,
 			    is_up ? MLXSW_PORT_ADMIN_STATUS_UP :
 			    MLXSW_PORT_ADMIN_STATUS_DOWN);
