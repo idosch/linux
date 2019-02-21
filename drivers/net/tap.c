@@ -715,7 +715,7 @@ static ssize_t tap_get_user(struct tap_queue *q, struct msghdr *m,
 			goto err_kfree;
 	}
 
-	skb_probe_transport_header(skb, ETH_HLEN);
+	skb_probe_transport_header(skb);
 
 	/* Move network header to the right position for VLAN tagged packets */
 	if ((skb->protocol == htons(ETH_P_8021Q) ||

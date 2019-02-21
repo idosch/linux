@@ -1547,7 +1547,7 @@ drop:
 	}
 
 	skb_reset_network_header(skb);
-	skb_probe_transport_header(skb, 0);
+	skb_probe_transport_header(skb);
 
 	if (skb_xdp) {
 		struct bpf_prog *xdp_prog;
