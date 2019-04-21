@@ -33,6 +33,8 @@ struct devlink {
 	u32 snapshot_id;
 	struct list_head reporter_list;
 	struct devlink_dpipe_headers *dpipe_headers;
+	struct list_head trap_list;
+	struct rhashtable trap_ht;
 	const struct devlink_ops *ops;
 	struct device *dev;
 	possible_net_t _net;
@@ -478,6 +480,38 @@ struct devlink_health_reporter_ops {
 			struct devlink_fmsg *fmsg);
 };
 
+/**
+ * struct devlink_trap_metadata - Packet trap metadata
+ * @timestamp: Timestamp of the packet in nanoseconds
+ * @in_port_index: Devlink port index of ingress port
+ *
+ * Describes the metadata about trapped packets that drivers pass devlink.
+ */
+struct devlink_trap_metadata {
+	u64 timestamp;
+	unsigned int in_port_index;
+};
+
+/**
+ * struct devlink_trap - Packet trap attributes
+ * @state_set: Callback to set trap state in underlying device
+ * @init_state: Initial trap state
+ * @name: Trap name
+ * @id: Trap identifier
+ * @metadata_in_port: Trap provides input port
+ * @metadata_timestamp: Trap provides timestamp
+ *
+ * Describes attributes of packet traps that drivers register with devlink.
+ */
+struct devlink_trap {
+	int (*state_set)(struct devlink *devlink, u16 id, bool enable);
+	enum devlink_trap_state init_state;
+	const char *name;
+	u16 id;
+	u8 metadata_in_port:1,
+	   metadata_timestamp:1;
+};
+
 struct devlink_ops {
 	int (*reload)(struct devlink *devlink, struct netlink_ext_ack *extack);
 	int (*port_type_set)(struct devlink_port *devlink_port,
@@ -737,6 +771,17 @@ int devlink_health_report(struct devlink_health_reporter *reporter,
 void
 devlink_health_reporter_state_update(struct devlink_health_reporter *reporter,
 				     enum devlink_health_reporter_state state);
+
+int devlink_traps_register(struct devlink *devlink,
+			   const struct devlink_trap *traps,
+			   size_t traps_count);
+void devlink_traps_unregister(struct devlink *devlink,
+			      const struct devlink_trap *traps,
+			      size_t traps_count);
+void devlink_trap_report(struct devlink *devlink,
+			 const struct devlink_trap *trap,
+			 struct sk_buff *skb,
+			 const struct devlink_trap_metadata *metadata);
 
 #if IS_ENABLED(CONFIG_NET_DEVLINK)
 

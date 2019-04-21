@@ -16,6 +16,7 @@
 #define DEVLINK_GENL_NAME "devlink"
 #define DEVLINK_GENL_VERSION 0x1
 #define DEVLINK_GENL_MCGRP_CONFIG_NAME "config"
+#define DEVLINK_GENL_MCGRP_TRAP_NAME "trap"
 
 enum devlink_command {
 	/* don't change the order or add anything between, this is ABI! */
@@ -105,6 +106,12 @@ enum devlink_command {
 
 	DEVLINK_CMD_FLASH_UPDATE,
 
+	DEVLINK_CMD_TRAP_GET,		/* can dump */
+	DEVLINK_CMD_TRAP_SET,
+	DEVLINK_CMD_TRAP_NEW,
+	DEVLINK_CMD_TRAP_DEL,
+	DEVLINK_CMD_TRAP_REPORT,
+
 	/* add new commands above here */
 	__DEVLINK_CMD_MAX,
 	DEVLINK_CMD_MAX = __DEVLINK_CMD_MAX - 1
@@ -182,6 +189,29 @@ enum devlink_param_cmode {
 enum devlink_param_fw_load_policy_value {
 	DEVLINK_PARAM_FW_LOAD_POLICY_VALUE_DRIVER,
 	DEVLINK_PARAM_FW_LOAD_POLICY_VALUE_FLASH,
+};
+
+/**
+ * enum devlink_trap_state - Packet trap state
+ * @DEVLINK_TRAP_STATE_DISABLE: Packets should not be received from this trap
+ * @DEVLINK_TRAP_STATE_ENABLE: Packets should be received from this trap
+ * @DEVLINK_TRAP_STATE_REPORT: Packets should be received from this trap and
+ * reported to user space
+ */
+enum devlink_trap_state {
+	DEVLINK_TRAP_STATE_DISABLE,
+	DEVLINK_TRAP_STATE_ENABLE,
+	DEVLINK_TRAP_STATE_REPORT,
+};
+
+enum {
+	DEVLINK_ATTR_TRAP_METADATA_TYPE_IN_PORT,
+	DEVLINK_ATTR_TRAP_METADATA_TYPE_TIMESTAMP,
+};
+
+enum {
+	DEVLINK_ATTR_STATS_RX_PACKETS,
+	DEVLINK_ATTR_STATS_RX_BYTES,
 };
 
 enum devlink_attr {
@@ -331,6 +361,17 @@ enum devlink_attr {
 
 	DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME,	/* string */
 	DEVLINK_ATTR_FLASH_UPDATE_COMPONENT,	/* string */
+
+	DEVLINK_ATTR_STATS,				/* nested */
+
+	DEVLINK_ATTR_TRAP_ID,				/* u16 */
+	DEVLINK_ATTR_TRAP_STATE,			/* u8 */
+	DEVLINK_ATTR_TRAP_NAME,				/* string */
+	DEVLINK_ATTR_TRAP_METADATA,			/* nested */
+	/* In nanoseconds */
+	DEVLINK_ATTR_TRAP_TIMESTAMP,			/* u64 */
+	DEVLINK_ATTR_TRAP_IN_PORT,			/* nested */
+	DEVLINK_ATTR_TRAP_PAYLOAD,			/* dynamic */
 
 	/* add new attributes above here, update the policy in devlink.c */
 
