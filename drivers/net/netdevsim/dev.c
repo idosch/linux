@@ -17,11 +17,20 @@
 
 #include <linux/debugfs.h>
 #include <linux/device.h>
+#include <linux/etherdevice.h>
+#include <linux/inet.h>
+#include <linux/jiffies.h>
+#include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
+#include <linux/workqueue.h>
+#include <linux/random.h>
 #include <linux/rtnetlink.h>
+#include <uapi/linux/ip.h>
+#include <uapi/linux/udp.h>
 #include <net/devlink.h>
+#include <net/ip.h>
 
 #include "netdevsim.h"
 
@@ -194,6 +203,241 @@ out:
 	return err;
 }
 
+#define NSIM_TRAP_GROUP_L2_ID	0xdead
+
+const static struct devlink_trap_group nsim_trap_groups_arr[] = {
+	{
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.id = NSIM_TRAP_GROUP_L2_ID,
+		.name = "l2_drops"
+	},
+};
+
+#define NSIM_TRAP_INGRESS_SMAC_MC_DROP_ID		0x10
+#define NSIM_TRAP_INGRESS_VLAN_TAG_ALLOW_DROP_ID	0x20
+#define NSIM_TRAP_INGRESS_VLAN_FILTER_DROP_ID		0x30
+#define NSIM_TRAP_INGRESS_STP_FILTER_DROP_ID		0x40
+#define NSIM_TRAP_EMPTY_TX_LIST_DROP_ID			0x50
+#define NSIM_TRAP_LOOPBACK_FILTER_DROP_ID		0x60
+
+static int nsim_dev_trap_state_set(struct devlink *devlink, u16 id,
+				   bool enable);
+
+const static struct devlink_trap nsim_traps_arr[] = {
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "ingress_smac_mc_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_INGRESS_SMAC_MC_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "ingress_vlan_tag_allow_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_INGRESS_VLAN_TAG_ALLOW_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "ingress_vlan_filter_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_INGRESS_VLAN_FILTER_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "ingress_stp_filter_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_INGRESS_STP_FILTER_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "empty_tx_list_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_EMPTY_TX_LIST_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+	{
+		.state_set = nsim_dev_trap_state_set,
+		.init_state = DEVLINK_TRAP_STATE_DISABLE,
+		.name = "loopback_filter_drop",
+		.group_id = NSIM_TRAP_GROUP_L2_ID,
+		.id = NSIM_TRAP_LOOPBACK_FILTER_DROP_ID,
+		.metadata_in_port = 1,
+		.metadata_timestamp = 1,
+	},
+};
+
+#define NSIM_TRAP_REPORT_INTERVAL	1000	/* ms */
+
+static int nsim_dev_trap_state_set(struct devlink *devlink, u16 id,
+				   bool enable)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+	size_t arr_size = ARRAY_SIZE(nsim_traps_arr);
+	int i;
+
+	for (i = 0; i < arr_size; i++) {
+		if (nsim_traps_arr[i].id == id)
+			break;
+	}
+
+	if (WARN_ON_ONCE(i == arr_size))
+		return -EINVAL;
+
+	nsim_dev->traps_state_arr[i] = enable;
+
+	return 0;
+}
+
+static struct sk_buff *nsim_dev_trap_skb_build(void)
+{
+	int tot_len, data_len = 100;
+	struct sk_buff *skb;
+	struct udphdr *udph;
+	struct ethhdr *eth;
+	struct iphdr *iph;
+
+	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!skb)
+		return NULL;
+	tot_len = sizeof(struct iphdr) + sizeof(struct udphdr) + data_len;
+
+	eth = skb_put(skb, sizeof(struct ethhdr));
+	eth_random_addr(eth->h_dest);
+	eth_random_addr(eth->h_source);
+	eth->h_proto = htons(ETH_P_IP);
+	skb->protocol = htons(ETH_P_IP);
+
+	iph = skb_put(skb, sizeof(struct iphdr));
+	iph->protocol = IPPROTO_UDP;
+	iph->saddr = in_aton("192.0.2.1");
+	iph->daddr = in_aton("198.51.100.1");
+	iph->version = 0x4;
+	iph->frag_off = 0;
+	iph->ihl = 0x5;
+	iph->tot_len = htons(tot_len);
+	ip_send_check(iph);
+
+	udph = skb_put_zero(skb, sizeof(struct udphdr) + data_len);
+	get_random_bytes(&udph->source, sizeof(u16));
+	get_random_bytes(&udph->dest, sizeof(u16));
+	udph->len = htons(sizeof(struct udphdr) + data_len);
+
+	return skb;
+}
+
+static void nsim_dev_trap_report(struct nsim_dev_port *nsim_dev_port)
+{
+	struct nsim_dev *nsim_dev = nsim_dev_port->ns->nsim_dev;
+	struct devlink *devlink = priv_to_devlink(nsim_dev);
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(nsim_traps_arr); i++) {
+		struct devlink_trap_metadata metadata = {
+			.in_port_index = nsim_dev_port->port_index,
+			.timestamp = jiffies_to_nsecs(jiffies),
+		};
+		struct sk_buff *skb;
+
+		if (nsim_dev->traps_state_arr[i] == false)
+			continue;
+
+		skb = nsim_dev_trap_skb_build();
+		if (!skb)
+			continue;
+		skb->dev = nsim_dev_port->ns->netdev;
+
+		rcu_read_lock();
+		devlink_trap_report(devlink, &nsim_traps_arr[i], skb,
+				    &metadata);
+		rcu_read_unlock();
+	}
+}
+
+static void nsim_dev_trap_report_work(struct work_struct *work)
+{
+	struct nsim_dev *nsim_dev = container_of(work, struct nsim_dev,
+						 trap_report_dw.work);
+	struct nsim_dev_port *nsim_dev_port;
+
+	/* For each running port and enabled packet trap, generate a UDP
+	 * packet with a random 5-tuple and report it.
+	 */
+	mutex_lock(&nsim_dev->port_list_lock);
+	list_for_each_entry(nsim_dev_port, &nsim_dev->port_list, list) {
+		if (!netif_running(nsim_dev_port->ns->netdev))
+			continue;
+
+		nsim_dev_trap_report(nsim_dev_port);
+	}
+	mutex_unlock(&nsim_dev->port_list_lock);
+
+	schedule_delayed_work(&nsim_dev->trap_report_dw,
+			      msecs_to_jiffies(NSIM_TRAP_REPORT_INTERVAL));
+}
+
+static int nsim_dev_traps_init(struct devlink *devlink)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+	int err;
+
+	err = devlink_trap_groups_register(devlink, nsim_trap_groups_arr,
+					   ARRAY_SIZE(nsim_trap_groups_arr));
+	if (err)
+		return err;
+
+	err = devlink_traps_register(devlink, nsim_traps_arr,
+				     ARRAY_SIZE(nsim_traps_arr));
+	if (err)
+		goto err_trap_groups_unregister;
+
+	nsim_dev->traps_state_arr = kcalloc(ARRAY_SIZE(nsim_traps_arr),
+					    sizeof(u8), GFP_KERNEL);
+	if (!nsim_dev->traps_state_arr) {
+		err = -ENOMEM;
+		goto err_traps_unregister;
+	}
+
+	INIT_DELAYED_WORK(&nsim_dev->trap_report_dw, nsim_dev_trap_report_work);
+	schedule_delayed_work(&nsim_dev->trap_report_dw,
+			      msecs_to_jiffies(NSIM_TRAP_REPORT_INTERVAL));
+
+	return 0;
+
+err_traps_unregister:
+	devlink_traps_unregister(devlink, nsim_traps_arr,
+				 ARRAY_SIZE(nsim_traps_arr));
+err_trap_groups_unregister:
+	devlink_trap_groups_unregister(devlink, nsim_trap_groups_arr,
+				       ARRAY_SIZE(nsim_trap_groups_arr));
+	return err;
+}
+
+static void nsim_dev_traps_exit(struct devlink *devlink)
+{
+	struct nsim_dev *nsim_dev = devlink_priv(devlink);
+
+	cancel_delayed_work_sync(&nsim_dev->trap_report_dw);
+	kfree(nsim_dev->traps_state_arr);
+	devlink_traps_unregister(devlink, nsim_traps_arr,
+				 ARRAY_SIZE(nsim_traps_arr));
+	devlink_trap_groups_unregister(devlink, nsim_trap_groups_arr,
+				       ARRAY_SIZE(nsim_trap_groups_arr));
+}
+
 static int nsim_dev_reload(struct devlink *devlink,
 			   struct netlink_ext_ack *extack)
 {
@@ -255,9 +499,13 @@ static struct nsim_dev *nsim_dev_create(struct nsim_bus_dev *nsim_bus_dev,
 	if (err)
 		goto err_resources_unregister;
 
-	err = nsim_dev_debugfs_init(nsim_dev);
+	err = nsim_dev_traps_init(devlink);
 	if (err)
 		goto err_dl_unregister;
+
+	err = nsim_dev_debugfs_init(nsim_dev);
+	if (err)
+		goto err_traps_exit;
 
 	err = nsim_bpf_dev_init(nsim_dev);
 	if (err)
@@ -267,6 +515,8 @@ static struct nsim_dev *nsim_dev_create(struct nsim_bus_dev *nsim_bus_dev,
 
 err_debugfs_exit:
 	nsim_dev_debugfs_exit(nsim_dev);
+err_traps_exit:
+	nsim_dev_traps_exit(devlink);
 err_dl_unregister:
 	devlink_unregister(devlink);
 err_resources_unregister:
@@ -284,6 +534,7 @@ static void nsim_dev_destroy(struct nsim_dev *nsim_dev)
 
 	nsim_bpf_dev_exit(nsim_dev);
 	nsim_dev_debugfs_exit(nsim_dev);
+	nsim_dev_traps_exit(devlink);
 	devlink_unregister(devlink);
 	devlink_resources_unregister(devlink, NULL);
 	nsim_fib_destroy(nsim_dev->fib_data);
