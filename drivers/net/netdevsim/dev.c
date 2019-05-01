@@ -225,6 +225,7 @@ out:
 		.state_set = nsim_dev_trap_state_set,			\
 		.init_state = DEVLINK_TRAP_STATE_DISABLE,		\
 		.type = DEVLINK_TRAP_TYPE_##_type,			\
+		.port_type = DEVLINK_PORT_TYPE_ETH,			\
 		.name = _trap_name,					\
 		.group_id = NSIM_TRAP_GROUP_##_group_id_##_ID,		\
 		.id = NSIM_TRAP_##_trap_id_##_ID,			\
@@ -340,7 +341,7 @@ static void nsim_dev_trap_report(struct nsim_dev_port *nsim_dev_port)
 
 	for (i = 0; i < ARRAY_SIZE(nsim_traps_arr); i++) {
 		struct devlink_trap_metadata metadata = {
-			.in_port_index = nsim_dev_port->port_index,
+			.in_devlink_port = &nsim_dev_port->devlink_port,
 			.timestamp = jiffies_to_nsecs(jiffies),
 		};
 		struct sk_buff *skb;
