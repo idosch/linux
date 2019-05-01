@@ -7357,6 +7357,9 @@ devlink_nl_trap_report_in_port_put(struct sk_buff *msg,
 	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_INDEX, devlink_port->index))
 		goto nla_put_failure;
 
+	if (nla_put_u16(msg, DEVLINK_ATTR_PORT_TYPE, trap->port_type))
+		goto nla_put_failure;
+
 	if (trap->port_type == DEVLINK_PORT_TYPE_ETH) {
 		struct net_device *netdev;
 
