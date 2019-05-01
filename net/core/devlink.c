@@ -7297,6 +7297,20 @@ devlink_nl_trap_group_size(const struct devlink_trap_group_item *group_item)
 	       nla_total_size(strlen(group_item->group->name) + 1);
 }
 
+static size_t devlink_nl_trap_in_port_size(void)
+{
+	       /* DEVLINK_ATTR_TRAP_IN_PORT nest */
+	return nla_total_size(0) +
+	       /* DEVLINK_ATTR_PORT_INDEX */
+	       nla_total_size(sizeof(u32)) +
+	       /* DEVLINK_ATTR_PORT_TYPE */
+	       nla_total_size(sizeof(u16)) +
+	       /* DEVLINK_ATTR_PORT_NETDEV_IFINDEX */
+	       nla_total_size(sizeof(u32)) +
+	       /* DEVLINK_ATTR_PORT_{NETDEV, IBDEV}_NAME */
+	       nla_total_size(max_t(int, IFNAMSIZ, IB_DEVICE_NAME_MAX) + 1);
+}
+
 static size_t
 devlink_nl_trap_report_size(struct devlink *devlink,
 			    const struct devlink_trap_item *trap_item,
@@ -7319,10 +7333,8 @@ devlink_nl_trap_report_size(struct devlink *devlink,
 	       nla_total_size(sizeof(u8)) +
 	       /* DEVLINK_ATTR_TRAP_TIMESTAMP */
 	       nla_total_size_64bit(sizeof(u64)) +
-	       /* DEVLINK_ATTR_TRAP_IN_PORT nest */
-	       nla_total_size(0) +
-	       /* DEVLINK_ATTR_PORT_INDEX */
-	       nla_total_size(sizeof(u32)) +
+	       /* DEVLINK_ATTR_TRAP_IN_PORT */
+	       devlink_nl_trap_in_port_size();
 	       /* DEVLINK_ATTR_PACKET_PAYLOAD */
 	       nla_total_size(skb_len);
 }
@@ -7332,6 +7344,7 @@ devlink_nl_trap_report_in_port_put(struct sk_buff *msg,
 				   const struct devlink_trap *trap,
 				   const struct devlink_trap_metadata *metadata)
 {
+	const struct devlink_port *devlink_port = metadata->in_devlink_port;
 	struct nlattr *attr;
 
 	if (trap->metadata_in_port == 0)
@@ -7341,9 +7354,28 @@ devlink_nl_trap_report_in_port_put(struct sk_buff *msg,
 	if (!attr)
 		return -EMSGSIZE;
 
-	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_INDEX,
-			metadata->in_port_index))
+	if (nla_put_u32(msg, DEVLINK_ATTR_PORT_INDEX, devlink_port->index))
 		goto nla_put_failure;
+
+	if (trap->port_type == DEVLINK_PORT_TYPE_ETH) {
+		struct net_device *netdev;
+
+		netdev = rcu_dereference(devlink_port->type_dev);
+		if (netdev &&
+		    (nla_put_u32(msg, DEVLINK_ATTR_PORT_NETDEV_IFINDEX,
+				 netdev->ifindex) ||
+		     nla_put_string(msg, DEVLINK_ATTR_PORT_NETDEV_NAME,
+				    netdev->name)))
+			goto nla_put_failure;
+	} else if (trap->port_type == DEVLINK_PORT_TYPE_IB) {
+		struct ib_device *ibdev;
+
+		ibdev = rcu_dereference(devlink_port->type_dev);
+		if (ibdev &&
+		    nla_put_string(msg, DEVLINK_ATTR_PORT_IBDEV_NAME,
+				   ibdev->name))
+			goto nla_put_failure;
+	}
 
 	nla_nest_end(msg, attr);
 

@@ -484,19 +484,20 @@ struct devlink_health_reporter_ops {
 /**
  * struct devlink_trap_metadata - Packet trap metadata
  * @timestamp: Timestamp of the packet in nanoseconds
- * @in_port_index: Devlink port index of ingress port
+ * @in_devlink_port: Ingress devlink port
  *
  * Describes the metadata about trapped packets that drivers pass devlink.
  */
 struct devlink_trap_metadata {
 	u64 timestamp;
-	unsigned int in_port_index;
+	const struct devlink_port *in_devlink_port;
 };
 
 /**
  * struct devlink_trap - Packet trap attributes
  * @state_set: Callback to set trap state in underlying device
  * @init_state: Initial trap state
+ * @port_type: The type of the port reported as part of trap metadata.
  * @type: Trap type
  * @name: Trap name
  * @group_id: Trap group identifier
@@ -510,6 +511,7 @@ struct devlink_trap {
 	int (*state_set)(struct devlink *devlink, u16 id, bool enable);
 	enum devlink_trap_state init_state;
 	enum devlink_trap_type type;
+	enum devlink_port_type port_type;
 	const char *name;
 	u16 group_id;
 	u16 id;
