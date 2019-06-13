@@ -227,7 +227,8 @@ __mlxsw_sp_trap_group_init(struct mlxsw_sp *mlxsw_sp,
 		return -EINVAL;
 	}
 
-	mlxsw_reg_htgt_pack(htgt_pl, group_id, policer_id, priority, tc);
+	mlxsw_reg_htgt_pack(htgt_pl, group_id, MLXSW_REG_HTGT_INVALID_POLICER,
+			    priority, tc);
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(htgt), htgt_pl);
 }
 
