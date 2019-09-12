@@ -21,6 +21,7 @@
 #include <linux/percpu.h>
 #include <linux/notifier.h>
 #include <linux/refcount.h>
+#include <linux/bits.h>
 
 struct fib_config {
 	u8			fc_dst_len;
@@ -463,7 +464,13 @@ int fib_nh_common_init(struct fib_nh_common *nhc, struct nlattr *fc_encap,
 		       struct netlink_ext_ack *extack);
 void fib_nh_common_release(struct fib_nh_common *nhc);
 
+#define FIB_ALIAS_OFFLOAD	BIT(0)
+#define FIB_ALIAS_TRAP		BIT(1)
+
 /* Exported by fib_trie.c */
+void fib_alias_hw_flags_set(struct net *net, u32 dst, int dst_len,
+			    const struct fib_info *fi, u8 tos, u8 type,
+			    u32 tb_id, u8 hw_flags);
 void fib_trie_init(void);
 struct fib_table *fib_trie_table(u32 id, struct fib_table *alias);
 
