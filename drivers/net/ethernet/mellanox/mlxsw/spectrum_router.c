@@ -5387,9 +5387,6 @@ static int mlxsw_sp_router_fib6_replace(struct mlxsw_sp *mlxsw_sp,
 	if (mlxsw_sp->router->aborted)
 		return 0;
 
-	if (rt->fib6_src.plen)
-		return -EINVAL;
-
 	if (mlxsw_sp_fib6_rt_should_ignore(rt))
 		return 0;
 
@@ -5434,9 +5431,6 @@ static int mlxsw_sp_router_fib6_append(struct mlxsw_sp *mlxsw_sp,
 
 	if (mlxsw_sp->router->aborted)
 		return 0;
-
-	if (rt->fib6_src.plen)
-		return -EINVAL;
 
 	if (mlxsw_sp_fib6_rt_should_ignore(rt))
 		return 0;
@@ -6097,6 +6091,10 @@ static int mlxsw_sp_router_fib_event(struct notifier_block *nb,
 						 info);
 			if (fen6_info->rt->nh) {
 				NL_SET_ERR_MSG_MOD(info->extack, "IPv6 route with nexthop objects is not supported");
+				return notifier_from_errno(-EINVAL);
+			}
+			if (fen6_info->rt->fib6_src.plen) {
+				NL_SET_ERR_MSG_MOD(info->extack, "IPv6 source-specific routing is not supported");
 				return notifier_from_errno(-EINVAL);
 			}
 		}
