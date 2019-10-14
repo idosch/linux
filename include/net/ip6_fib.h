@@ -192,7 +192,9 @@ struct fib6_info {
 					dst_nopolicy:1,
 					dst_host:1,
 					fib6_destroying:1,
-					unused:3;
+					offload:1,
+					trap:1,
+					unused:1;
 
 	struct rcu_head			rcu;
 	struct nexthop			*nh;
