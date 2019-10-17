@@ -462,9 +462,53 @@ port_loopback_filter_uc_test()
 	l2_drops_cleanup $mz_pid
 }
 
+port_loopback_filter_mc_test()
+{
+	local trap_name="port_loopback_filter"
+	local dmac=01:00:5e:00:00:01
+	local group_name="l2_drops"
+	local dip=239.0.0.1
+	local mz_pid
+
+	# Make sure packets can only egress the input port.
+	ip link set dev $swp2 type bridge_slave mcast_flood off
+	# Flush IP addresses from the bridge in order to prevent packets from
+	# being flooded to the router port.
+	ip address flush dev br0
+
+	RET=0
+
+	tc filter add dev $swp2 egress protocol ip pref 1 handle 101 \
+		flower dst_mac $dmac action drop
+
+	$MZ $h1 -c 0 -p 100 -a own -b $dmac -t ip -B $dip -d 1msec -q &
+	mz_pid=$!
+
+	l2_drops_test $trap_name $group_name
+
+	# Allow packets to be flooded.
+	ip link set dev $swp2 type bridge_slave mcast_flood on
+	devlink_trap_action_set $trap_name "trap"
+
+	devlink_trap_stats_idle_test $trap_name
+	check_err $? "Trap stats not idle when packets should not be dropped"
+	devlink_trap_group_stats_idle_test $group_name
+	check_err $? "Trap group stats not idle with when packets should not be dropped"
+
+	tc_check_packets "dev $swp2 egress" 101 0
+	check_fail $? "Packets not forwarded when should"
+
+	devlink_trap_action_set $trap_name "drop"
+
+	log_test "Port loopback filter - multicast"
+
+	l2_drops_cleanup $mz_pid
+}
+
 port_loopback_filter_test()
 {
 	port_loopback_filter_uc_test
+	port_loopback_filter_mc_test
 }
 
 trap cleanup EXIT
