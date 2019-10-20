@@ -36,3 +36,7 @@ NETIF_CREATE=yes
 # Timeout (in seconds) before ping exits regardless of how many packets have
 # been sent or received
 PING_TIMEOUT=5
+# Sleep time (in seconds) before checking various offload indications. Required
+# in cases where programming the underlying device is deferred to a different
+# context.
+SLEEP_TIME=5
