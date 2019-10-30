@@ -154,10 +154,24 @@ be added to the following table:
      - ``drop``
      - Traps packets that the device decided to drop in case they hit a
        blackhole route
+   * - ``mtu_value_is_too_small``
+     - ``exception``
+     - Traps packets that should have been routed by the device, but were bigger
+       than the MTU of the egress interface
    * - ``ttl_value_is_too_small``
      - ``exception``
      - Traps unicast packets that should be forwarded by the device whose TTL
        was decremented to 0 or less
+   * - ``mc_reverse_path_forwarding``
+     - ``exception``
+     - Traps multicast IP packets that failed reverse-path forwarding (RPF)
+       check during multicast routing
+   * - ``reject_route``
+     - ``exception``
+     - Traps packets that hit reject routes (i.e., "unreachable", "prohibit")
+   * - ``unresolved_neigh``
+     - ``exception``
+     - Traps packets that did not have a matching IP neighbour after routing
    * - ``non_ip``
      - ``drop``
      - Traps packets that the device decided to drop because they need to
@@ -189,6 +203,12 @@ be added to the following table:
      - ``drop``
      - Traps packets that the device decided to drop because they need to be
        routed and their source IP is limited broadcast (i.e., 255.255.255.255/32)
+   * - ``ipv4_lpm_miss``
+     - ``exception``
+       - Traps unicast IPv4 packets that did not match any route
+   * - ``ipv6_lpm_miss``
+     - ``exception``
+       - Traps unicast IPv6 packets that did not match any route
    * - ``ipv6_mc_dip_reserved_scope``
      - ``drop``
      - Traps IPv6 packets that the device decided to drop because they need to
