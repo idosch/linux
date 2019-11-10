@@ -6214,7 +6214,7 @@ static int mlxsw_sp_netdevice_port_upper_event(struct net_device *lower_dev,
 			return -EINVAL;
 		}
 		if (netif_is_macvlan(upper_dev) &&
-		    !mlxsw_sp_rif_find_by_dev(mlxsw_sp, lower_dev)) {
+		    !mlxsw_sp_rif_exists(mlxsw_sp, lower_dev)) {
 			NL_SET_ERR_MSG_MOD(extack, "macvlan is only supported on top of router interfaces");
 			return -EOPNOTSUPP;
 		}
@@ -6370,7 +6370,7 @@ static int mlxsw_sp_netdevice_port_vlan_event(struct net_device *vlan_dev,
 			return -EINVAL;
 		}
 		if (netif_is_macvlan(upper_dev) &&
-		    !mlxsw_sp_rif_find_by_dev(mlxsw_sp, vlan_dev)) {
+		    !mlxsw_sp_rif_exists(mlxsw_sp, vlan_dev)) {
 			NL_SET_ERR_MSG_MOD(extack, "macvlan is only supported on top of router interfaces");
 			return -EOPNOTSUPP;
 		}
@@ -6447,7 +6447,7 @@ static int mlxsw_sp_netdevice_bridge_vlan_event(struct net_device *vlan_dev,
 		if (!info->linking)
 			break;
 		if (netif_is_macvlan(upper_dev) &&
-		    !mlxsw_sp_rif_find_by_dev(mlxsw_sp, vlan_dev)) {
+		    !mlxsw_sp_rif_exists(mlxsw_sp, vlan_dev)) {
 			NL_SET_ERR_MSG_MOD(extack, "macvlan is only supported on top of router interfaces");
 			return -EOPNOTSUPP;
 		}
@@ -6507,7 +6507,7 @@ static int mlxsw_sp_netdevice_bridge_event(struct net_device *br_dev,
 		if (!info->linking)
 			break;
 		if (netif_is_macvlan(upper_dev) &&
-		    !mlxsw_sp_rif_find_by_dev(mlxsw_sp, br_dev)) {
+		    !mlxsw_sp_rif_exists(mlxsw_sp, br_dev)) {
 			NL_SET_ERR_MSG_MOD(extack, "macvlan is only supported on top of router interfaces");
 			return -EOPNOTSUPP;
 		}
