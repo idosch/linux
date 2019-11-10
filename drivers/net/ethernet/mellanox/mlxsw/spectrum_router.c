@@ -17,6 +17,7 @@
 #include <linux/refcount.h>
 #include <linux/jhash.h>
 #include <linux/net_namespace.h>
+#include <linux/mutex.h>
 #include <net/netevent.h>
 #include <net/neighbour.h>
 #include <net/arp.h>
@@ -79,6 +80,7 @@ struct mlxsw_sp_router {
 	const struct mlxsw_sp_ipip_ops **ipip_ops_arr;
 	u32 adj_discard_index;
 	bool adj_discard_index_valid;
+	struct mutex router_lock;	/* Protects shared router resources */
 };
 
 struct mlxsw_sp_rif {
@@ -157,6 +159,16 @@ static int mlxsw_sp_vr_lpm_tree_bind(struct mlxsw_sp *mlxsw_sp,
 				     u8 tree_id);
 static int mlxsw_sp_vr_lpm_tree_unbind(struct mlxsw_sp *mlxsw_sp,
 				       const struct mlxsw_sp_fib *fib);
+
+void mlxsw_sp_router_lock(struct mlxsw_sp *mlxsw_sp)
+{
+	mutex_lock(&mlxsw_sp->router->router_lock);
+}
+
+void mlxsw_sp_router_unlock(struct mlxsw_sp *mlxsw_sp)
+{
+	mutex_unlock(&mlxsw_sp->router->router_lock);
+}
 
 static unsigned int *
 mlxsw_sp_rif_p_counter_get(struct mlxsw_sp_rif *rif,
@@ -7997,6 +8009,7 @@ int mlxsw_sp_router_init(struct mlxsw_sp *mlxsw_sp,
 	router = kzalloc(sizeof(*mlxsw_sp->router), GFP_KERNEL);
 	if (!router)
 		return -ENOMEM;
+	mutex_init(&router->router_lock);
 	mlxsw_sp->router = router;
 	router->mlxsw_sp = mlxsw_sp;
 
@@ -8100,6 +8113,7 @@ err_router_init:
 err_register_inet6addr_notifier:
 	unregister_inetaddr_notifier(&router->inetaddr_nb);
 err_register_inetaddr_notifier:
+	mutex_destroy(&mlxsw_sp->router->router_lock);
 	kfree(mlxsw_sp->router);
 	return err;
 }
@@ -8120,5 +8134,6 @@ void mlxsw_sp_router_fini(struct mlxsw_sp *mlxsw_sp)
 	__mlxsw_sp_router_fini(mlxsw_sp);
 	unregister_inet6addr_notifier(&mlxsw_sp->router->inet6addr_nb);
 	unregister_inetaddr_notifier(&mlxsw_sp->router->inetaddr_nb);
+	mutex_destroy(&mlxsw_sp->router->router_lock);
 	kfree(mlxsw_sp->router);
 }

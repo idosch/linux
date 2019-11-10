@@ -33,6 +33,8 @@ u16 mlxsw_sp_ipip_lb_ul_rif_id(const struct mlxsw_sp_rif_ipip_lb *lb_rif);
 u32 mlxsw_sp_ipip_dev_ul_tb_id(const struct net_device *ol_dev);
 int mlxsw_sp_rif_dev_ifindex(const struct mlxsw_sp_rif *rif);
 const struct net_device *mlxsw_sp_rif_dev(const struct mlxsw_sp_rif *rif);
+void mlxsw_sp_router_lock(struct mlxsw_sp *mlxsw_sp);
+void mlxsw_sp_router_unlock(struct mlxsw_sp *mlxsw_sp);
 int mlxsw_sp_rif_counter_value_get(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_rif *rif,
 				   enum mlxsw_sp_rif_counter_dir dir,
