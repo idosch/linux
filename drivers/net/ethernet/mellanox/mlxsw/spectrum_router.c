@@ -2296,6 +2296,7 @@ __mlxsw_sp_router_neighs_update_rauhtd(struct mlxsw_sp *mlxsw_sp,
 	 * process.
 	 */
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	do {
 		mlxsw_reg_rauhtd_pack(rauhtd_pl, type);
 		err = mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(rauhtd),
@@ -2309,6 +2310,7 @@ __mlxsw_sp_router_neighs_update_rauhtd(struct mlxsw_sp *mlxsw_sp,
 			mlxsw_sp_router_neigh_rec_process(mlxsw_sp, rauhtd_pl,
 							  i);
 	} while (mlxsw_sp_router_rauhtd_is_full(rauhtd_pl));
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 
 	return err;
@@ -2342,12 +2344,14 @@ static void mlxsw_sp_router_neighs_update_nh(struct mlxsw_sp *mlxsw_sp)
 
 	/* Take RTNL mutex here to prevent lists from changes */
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	list_for_each_entry(neigh_entry, &mlxsw_sp->router->nexthop_neighs_list,
 			    nexthop_neighs_list_node)
 		/* If this neigh have nexthops, make the kernel think this neigh
 		 * is active regardless of the traffic.
 		 */
 		neigh_event_send(neigh_entry->key.n, NULL);
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 }
 
@@ -2392,10 +2396,12 @@ static void mlxsw_sp_router_probe_unresolved_nexthops(struct work_struct *work)
 	 * Take RTNL mutex here to prevent lists from changes.
 	 */
 	rtnl_lock();
+	mlxsw_sp_router_lock(router->mlxsw_sp);
 	list_for_each_entry(neigh_entry, &router->nexthop_neighs_list,
 			    nexthop_neighs_list_node)
 		if (!neigh_entry->connected)
 			neigh_event_send(neigh_entry->key.n, NULL);
+	mlxsw_sp_router_unlock(router->mlxsw_sp);
 	rtnl_unlock();
 
 	mlxsw_core_schedule_dw(&router->nexthop_probe_dw,
@@ -2535,6 +2541,7 @@ static void mlxsw_sp_router_neigh_event_work(struct work_struct *work)
 	read_unlock_bh(&n->lock);
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
 	entry_connected = nud_state & NUD_VALID && !dead;
@@ -2556,6 +2563,7 @@ static void mlxsw_sp_router_neigh_event_work(struct work_struct *work)
 		mlxsw_sp_neigh_entry_destroy(mlxsw_sp, neigh_entry);
 
 out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	neigh_release(n);
 	kfree(net_work);
@@ -5903,6 +5911,7 @@ static void mlxsw_sp_router_fib4_event_work(struct work_struct *work)
 
 	/* Protect internal structures from changes */
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
 	switch (fib_work->event) {
@@ -5924,6 +5933,7 @@ static void mlxsw_sp_router_fib4_event_work(struct work_struct *work)
 		fib_info_put(fib_work->fnh_info.fib_nh->nh_parent);
 		break;
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	kfree(fib_work);
 }
@@ -5936,6 +5946,7 @@ static void mlxsw_sp_router_fib6_event_work(struct work_struct *work)
 	int err;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
 	switch (fib_work->event) {
@@ -5962,6 +5973,7 @@ static void mlxsw_sp_router_fib6_event_work(struct work_struct *work)
 		mlxsw_sp_router_fib6_work_fini(&fib_work->fib6_work);
 		break;
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	kfree(fib_work);
 }
@@ -5975,6 +5987,7 @@ static void mlxsw_sp_router_fibmr_event_work(struct work_struct *work)
 	int err;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	switch (fib_work->event) {
 	case FIB_EVENT_ENTRY_REPLACE: /* fall through */
 	case FIB_EVENT_ENTRY_ADD:
@@ -6003,6 +6016,7 @@ static void mlxsw_sp_router_fibmr_event_work(struct work_struct *work)
 		dev_put(fib_work->ven_info.dev);
 		break;
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	kfree(fib_work);
 }
@@ -7016,6 +7030,7 @@ static void mlxsw_sp_inet6addr_event_work(struct work_struct *work)
 	struct mlxsw_sp_rif *rif;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
 	if (!mlxsw_sp_rif_should_config(rif, dev, event))
@@ -7023,6 +7038,7 @@ static void mlxsw_sp_inet6addr_event_work(struct work_struct *work)
 
 	__mlxsw_sp_inetaddr_event(mlxsw_sp, dev, event, NULL);
 out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	dev_put(dev);
 	kfree(inet6addr_work);

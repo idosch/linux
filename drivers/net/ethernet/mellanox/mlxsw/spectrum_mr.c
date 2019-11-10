@@ -9,6 +9,7 @@
 
 struct mlxsw_sp_mr {
 	const struct mlxsw_sp_mr_ops *mr_ops;
+	struct mlxsw_sp *mlxsw_sp;
 	void *catchall_route_priv;
 	struct delayed_work stats_update_dw;
 	struct list_head table_list;
@@ -1001,10 +1002,12 @@ static void mlxsw_sp_mr_stats_update(struct work_struct *work)
 	unsigned long interval;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mr->mlxsw_sp);
 	list_for_each_entry(mr_table, &mr->table_list, node)
 		list_for_each_entry(mr_route, &mr_table->route_list, node)
 			mlxsw_sp_mr_route_stats_update(mr_table->mlxsw_sp,
 						       mr_route);
+	mlxsw_sp_router_unlock(mr->mlxsw_sp);
 	rtnl_unlock();
 
 	interval = msecs_to_jiffies(MLXSW_SP_MR_ROUTES_COUNTER_UPDATE_INTERVAL);
@@ -1022,6 +1025,7 @@ int mlxsw_sp_mr_init(struct mlxsw_sp *mlxsw_sp,
 	if (!mr)
 		return -ENOMEM;
 	mr->mr_ops = mr_ops;
+	mr->mlxsw_sp = mlxsw_sp;
 	mlxsw_sp->mr = mr;
 	INIT_LIST_HEAD(&mr->table_list);
 
