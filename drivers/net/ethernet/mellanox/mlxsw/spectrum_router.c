@@ -6596,8 +6596,8 @@ err_fid_port_vid_map:
 	return err;
 }
 
-void
-mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
+static void
+__mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
 {
 	struct mlxsw_sp_port *mlxsw_sp_port = mlxsw_sp_port_vlan->mlxsw_sp_port;
 	struct mlxsw_sp_fid *fid = mlxsw_sp_port_vlan->fid;
@@ -6613,6 +6613,12 @@ mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
 	mlxsw_sp_fid_port_vid_unmap(fid, mlxsw_sp_port, vid);
 	mlxsw_sp_fid_put(fid);
 	mlxsw_sp_rif_subport_put(rif);
+}
+
+void
+mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
+{
+	__mlxsw_sp_port_vlan_router_leave(mlxsw_sp_port_vlan);
 }
 
 static int mlxsw_sp_inetaddr_port_vlan_event(struct net_device *l3_dev,
@@ -6632,7 +6638,7 @@ static int mlxsw_sp_inetaddr_port_vlan_event(struct net_device *l3_dev,
 		return mlxsw_sp_port_vlan_router_join(mlxsw_sp_port_vlan,
 						      l3_dev, extack);
 	case NETDEV_DOWN:
-		mlxsw_sp_port_vlan_router_leave(mlxsw_sp_port_vlan);
+		__mlxsw_sp_port_vlan_router_leave(mlxsw_sp_port_vlan);
 		break;
 	}
 
