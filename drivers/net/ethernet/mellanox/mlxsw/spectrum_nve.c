@@ -14,6 +14,7 @@
 #include "reg.h"
 #include "spectrum.h"
 #include "spectrum_nve.h"
+#include "spectrum_router.h"
 
 const struct mlxsw_sp_nve_ops *mlxsw_sp1_nve_ops_arr[] = {
 	[MLXSW_SP_NVE_TYPE_VXLAN]	= &mlxsw_sp1_nve_vxlan_ops,
@@ -741,8 +742,9 @@ static int mlxsw_sp_nve_tunnel_init(struct mlxsw_sp *mlxsw_sp,
 	const struct mlxsw_sp_nve_ops *ops;
 	int err;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	if (nve->num_nve_tunnels++ != 0)
-		return 0;
+		goto out;
 
 	nve->config = *config;
 
@@ -756,6 +758,8 @@ static int mlxsw_sp_nve_tunnel_init(struct mlxsw_sp *mlxsw_sp,
 	if (err)
 		goto err_ops_init;
 
+out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	return 0;
 
 err_ops_init:
@@ -764,6 +768,7 @@ err_ops_init:
 err_kvdl_alloc:
 	memset(&nve->config, 0, sizeof(nve->config));
 	nve->num_nve_tunnels--;
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	return err;
 }
 
@@ -774,6 +779,7 @@ static void mlxsw_sp_nve_tunnel_fini(struct mlxsw_sp *mlxsw_sp)
 
 	ops = nve->nve_ops_arr[nve->config.type];
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	if (mlxsw_sp->nve->num_nve_tunnels == 1) {
 		ops->fini(nve);
 		mlxsw_sp_kvdl_free(mlxsw_sp, MLXSW_SP_KVDL_ENTRY_TYPE_ADJ, 1,
@@ -781,6 +787,7 @@ static void mlxsw_sp_nve_tunnel_fini(struct mlxsw_sp *mlxsw_sp)
 		memset(&nve->config, 0, sizeof(nve->config));
 	}
 	nve->num_nve_tunnels--;
+	mlxsw_sp_router_unlock(mlxsw_sp);
 }
 
 static void mlxsw_sp_nve_fdb_flush_by_fid(struct mlxsw_sp *mlxsw_sp,
