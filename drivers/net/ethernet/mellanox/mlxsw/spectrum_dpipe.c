@@ -211,6 +211,7 @@ mlxsw_sp_dpipe_table_erif_entries_dump(void *priv, bool counters_enabled,
 
 	rif_count = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS);
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	i = 0;
 start_again:
 	err = devlink_dpipe_entry_ctx_prepare(dump_ctx);
@@ -241,12 +242,14 @@ start_again:
 	devlink_dpipe_entry_ctx_close(dump_ctx);
 	if (i != rif_count)
 		goto start_again;
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 
 	devlink_dpipe_entry_clear(&entry);
 	return 0;
 err_entry_append:
 err_entry_get:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	devlink_dpipe_entry_clear(&entry);
 	return err;
@@ -258,6 +261,7 @@ static int mlxsw_sp_dpipe_table_erif_counters_update(void *priv, bool enable)
 	int i;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	for (i = 0; i < MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS); i++) {
 		struct mlxsw_sp_rif *rif = mlxsw_sp_rif_by_index(mlxsw_sp, i);
 
@@ -270,6 +274,7 @@ static int mlxsw_sp_dpipe_table_erif_counters_update(void *priv, bool enable)
 			mlxsw_sp_rif_counter_free(mlxsw_sp, rif,
 						  MLXSW_SP_RIF_COUNTER_EGRESS);
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	return 0;
 }
@@ -546,6 +551,7 @@ mlxsw_sp_dpipe_table_host_entries_get(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	i = 0;
 	rif_count = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS);
 start_again:
@@ -601,11 +607,13 @@ out:
 	if (i != rif_count)
 		goto start_again;
 
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	return 0;
 
 err_ctx_prepare:
 err_entry_append:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	return err;
 }
@@ -662,6 +670,7 @@ mlxsw_sp_dpipe_table_host_counters_update(struct mlxsw_sp *mlxsw_sp,
 	int i;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	for (i = 0; i < MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS); i++) {
 		struct mlxsw_sp_rif *rif = mlxsw_sp_rif_by_index(mlxsw_sp, i);
 		struct mlxsw_sp_neigh_entry *neigh_entry;
@@ -683,6 +692,7 @@ mlxsw_sp_dpipe_table_host_counters_update(struct mlxsw_sp *mlxsw_sp,
 							    enable);
 		}
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 }
 
@@ -701,6 +711,7 @@ mlxsw_sp_dpipe_table_host_size_get(struct mlxsw_sp *mlxsw_sp, int type)
 	int i;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	for (i = 0; i < MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_RIFS); i++) {
 		struct mlxsw_sp_rif *rif = mlxsw_sp_rif_by_index(mlxsw_sp, i);
 		struct mlxsw_sp_neigh_entry *neigh_entry;
@@ -720,6 +731,7 @@ mlxsw_sp_dpipe_table_host_size_get(struct mlxsw_sp *mlxsw_sp, int type)
 			size++;
 		}
 	}
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 
 	return size;
@@ -1093,6 +1105,7 @@ mlxsw_sp_dpipe_table_adj_entries_get(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	nh_count_max = mlxsw_sp_dpipe_table_adj_size(mlxsw_sp);
 start_again:
 	err = devlink_dpipe_entry_ctx_prepare(dump_ctx);
@@ -1129,12 +1142,14 @@ skip:
 	devlink_dpipe_entry_ctx_close(dump_ctx);
 	if (nh_count != nh_count_max)
 		goto start_again;
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 
 	return 0;
 
 err_ctx_prepare:
 err_entry_append:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 	return err;
 }
@@ -1206,7 +1221,9 @@ mlxsw_sp_dpipe_table_adj_size_get(void *priv)
 	u64 size;
 
 	rtnl_lock();
+	mlxsw_sp_router_lock(mlxsw_sp);
 	size = mlxsw_sp_dpipe_table_adj_size(mlxsw_sp);
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	rtnl_unlock();
 
 	return size;
