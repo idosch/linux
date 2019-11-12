@@ -6988,15 +6988,17 @@ static int mlxsw_sp_inetaddr_event(struct notifier_block *nb,
 
 	/* NETDEV_UP event is handled by mlxsw_sp_inetaddr_valid_event */
 	if (event == NETDEV_UP)
-		goto out;
+		return NOTIFY_DONE;
 
 	router = container_of(nb, struct mlxsw_sp_router, inetaddr_nb);
+	mlxsw_sp_router_lock(router->mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(router->mlxsw_sp, dev);
 	if (!mlxsw_sp_rif_should_config(rif, dev, event))
 		goto out;
 
 	err = __mlxsw_sp_inetaddr_event(router->mlxsw_sp, dev, event, NULL);
 out:
+	mlxsw_sp_router_unlock(router->mlxsw_sp);
 	return notifier_from_errno(err);
 }
 
@@ -7011,8 +7013,9 @@ int mlxsw_sp_inetaddr_valid_event(struct notifier_block *unused,
 
 	mlxsw_sp = mlxsw_sp_lower_get(dev);
 	if (!mlxsw_sp)
-		goto out;
+		return NOTIFY_DONE;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
 	if (!mlxsw_sp_rif_should_config(rif, dev, event))
 		goto out;
@@ -7024,6 +7027,7 @@ int mlxsw_sp_inetaddr_valid_event(struct notifier_block *unused,
 
 	err = __mlxsw_sp_inetaddr_event(mlxsw_sp, dev, event, ivi->extack);
 out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	return notifier_from_errno(err);
 }
 
@@ -7097,8 +7101,9 @@ int mlxsw_sp_inet6addr_valid_event(struct notifier_block *unused,
 
 	mlxsw_sp = mlxsw_sp_lower_get(dev);
 	if (!mlxsw_sp)
-		goto out;
+		return NOTIFY_DONE;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
 	if (!mlxsw_sp_rif_should_config(rif, dev, event))
 		goto out;
@@ -7110,6 +7115,7 @@ int mlxsw_sp_inet6addr_valid_event(struct notifier_block *unused,
 
 	err = __mlxsw_sp_inetaddr_event(mlxsw_sp, dev, event, i6vi->extack);
 out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	return notifier_from_errno(err);
 }
 
