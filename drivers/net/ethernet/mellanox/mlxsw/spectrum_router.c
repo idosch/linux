@@ -6258,7 +6258,9 @@ bool mlxsw_sp_rif_exists(struct mlxsw_sp *mlxsw_sp,
 {
 	struct mlxsw_sp_rif *rif;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
+	mlxsw_sp_router_unlock(mlxsw_sp);
 
 	return !!rif;
 }
@@ -6268,6 +6270,7 @@ u16 mlxsw_sp_rif_vid(struct mlxsw_sp *mlxsw_sp, const struct net_device *dev)
 	struct mlxsw_sp_rif *rif;
 	u16 vid = 0;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
 	if (!rif)
 		goto out;
@@ -6281,6 +6284,7 @@ u16 mlxsw_sp_rif_vid(struct mlxsw_sp *mlxsw_sp, const struct net_device *dev)
 	vid = mlxsw_sp_fid_8021q_vid(rif->fid);
 
 out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 	return vid;
 }
 
@@ -6562,10 +6566,13 @@ void mlxsw_sp_rif_destroy_by_dev(struct mlxsw_sp *mlxsw_sp,
 {
 	struct mlxsw_sp_rif *rif;
 
+	mlxsw_sp_router_lock(mlxsw_sp);
 	rif = mlxsw_sp_rif_find_by_dev(mlxsw_sp, dev);
 	if (!rif)
-		return;
+		goto out;
 	mlxsw_sp_rif_destroy(rif);
+out:
+	mlxsw_sp_router_unlock(mlxsw_sp);
 }
 
 static void
@@ -6687,7 +6694,11 @@ __mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
 void
 mlxsw_sp_port_vlan_router_leave(struct mlxsw_sp_port_vlan *mlxsw_sp_port_vlan)
 {
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port_vlan->mlxsw_sp_port->mlxsw_sp;
+
+	mlxsw_sp_router_lock(mlxsw_sp);
 	__mlxsw_sp_port_vlan_router_leave(mlxsw_sp_port_vlan);
+	mlxsw_sp_router_unlock(mlxsw_sp);
 }
 
 static int mlxsw_sp_inetaddr_port_vlan_event(struct net_device *l3_dev,
@@ -6909,7 +6920,9 @@ static void __mlxsw_sp_rif_macvlan_del(struct mlxsw_sp *mlxsw_sp,
 void mlxsw_sp_rif_macvlan_del(struct mlxsw_sp *mlxsw_sp,
 			      const struct net_device *macvlan_dev)
 {
+	mlxsw_sp_router_lock(mlxsw_sp);
 	__mlxsw_sp_rif_macvlan_del(mlxsw_sp, macvlan_dev);
+	mlxsw_sp_router_unlock(mlxsw_sp);
 }
 
 static int mlxsw_sp_inetaddr_macvlan_event(struct mlxsw_sp *mlxsw_sp,
