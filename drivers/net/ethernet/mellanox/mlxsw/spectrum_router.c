@@ -2309,7 +2309,6 @@ __mlxsw_sp_router_neighs_update_rauhtd(struct mlxsw_sp *mlxsw_sp,
 	/* Make sure the neighbour's netdev isn't removed in the
 	 * process.
 	 */
-	rtnl_lock();
 	mlxsw_sp_router_lock(mlxsw_sp);
 	do {
 		mlxsw_reg_rauhtd_pack(rauhtd_pl, type);
@@ -2325,7 +2324,6 @@ __mlxsw_sp_router_neighs_update_rauhtd(struct mlxsw_sp *mlxsw_sp,
 							  i);
 	} while (mlxsw_sp_router_rauhtd_is_full(rauhtd_pl));
 	mlxsw_sp_router_unlock(mlxsw_sp);
-	rtnl_unlock();
 
 	return err;
 }
@@ -2356,8 +2354,6 @@ static void mlxsw_sp_router_neighs_update_nh(struct mlxsw_sp *mlxsw_sp)
 {
 	struct mlxsw_sp_neigh_entry *neigh_entry;
 
-	/* Take RTNL mutex here to prevent lists from changes */
-	rtnl_lock();
 	mlxsw_sp_router_lock(mlxsw_sp);
 	list_for_each_entry(neigh_entry, &mlxsw_sp->router->nexthop_neighs_list,
 			    nexthop_neighs_list_node)
@@ -2366,7 +2362,6 @@ static void mlxsw_sp_router_neighs_update_nh(struct mlxsw_sp *mlxsw_sp)
 		 */
 		neigh_event_send(neigh_entry->key.n, NULL);
 	mlxsw_sp_router_unlock(mlxsw_sp);
-	rtnl_unlock();
 }
 
 static void
@@ -2406,17 +2401,13 @@ static void mlxsw_sp_router_probe_unresolved_nexthops(struct work_struct *work)
 	 * the nexthop wouldn't get offloaded until the neighbor is resolved
 	 * but it wouldn't get resolved ever in case traffic is flowing in HW
 	 * using different nexthop.
-	 *
-	 * Take RTNL mutex here to prevent lists from changes.
 	 */
-	rtnl_lock();
 	mlxsw_sp_router_lock(router->mlxsw_sp);
 	list_for_each_entry(neigh_entry, &router->nexthop_neighs_list,
 			    nexthop_neighs_list_node)
 		if (!neigh_entry->connected)
 			neigh_event_send(neigh_entry->key.n, NULL);
 	mlxsw_sp_router_unlock(router->mlxsw_sp);
-	rtnl_unlock();
 
 	mlxsw_core_schedule_dw(&router->nexthop_probe_dw,
 			       MLXSW_SP_UNRESOLVED_NH_PROBE_INTERVAL);
@@ -2554,7 +2545,6 @@ static void mlxsw_sp_router_neigh_event_work(struct work_struct *work)
 	dead = n->dead;
 	read_unlock_bh(&n->lock);
 
-	rtnl_lock();
 	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
@@ -2578,7 +2568,6 @@ static void mlxsw_sp_router_neigh_event_work(struct work_struct *work)
 
 out:
 	mlxsw_sp_router_unlock(mlxsw_sp);
-	rtnl_unlock();
 	neigh_release(n);
 	kfree(net_work);
 }
@@ -5924,7 +5913,6 @@ static void mlxsw_sp_router_fib4_event_work(struct work_struct *work)
 	int err;
 
 	/* Protect internal structures from changes */
-	rtnl_lock();
 	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
@@ -5948,7 +5936,6 @@ static void mlxsw_sp_router_fib4_event_work(struct work_struct *work)
 		break;
 	}
 	mlxsw_sp_router_unlock(mlxsw_sp);
-	rtnl_unlock();
 	kfree(fib_work);
 }
 
@@ -5959,7 +5946,6 @@ static void mlxsw_sp_router_fib6_event_work(struct work_struct *work)
 	struct mlxsw_sp *mlxsw_sp = fib_work->mlxsw_sp;
 	int err;
 
-	rtnl_lock();
 	mlxsw_sp_router_lock(mlxsw_sp);
 	mlxsw_sp_span_respin(mlxsw_sp);
 
@@ -5988,7 +5974,6 @@ static void mlxsw_sp_router_fib6_event_work(struct work_struct *work)
 		break;
 	}
 	mlxsw_sp_router_unlock(mlxsw_sp);
-	rtnl_unlock();
 	kfree(fib_work);
 }
 
@@ -7806,8 +7791,6 @@ int mlxsw_sp_router_ul_rif_get(struct mlxsw_sp *mlxsw_sp, u32 ul_tb_id,
 {
 	struct mlxsw_sp_rif *ul_rif;
 
-	ASSERT_RTNL();
-
 	ul_rif = mlxsw_sp_ul_rif_get(mlxsw_sp, ul_tb_id, NULL);
 	if (IS_ERR(ul_rif))
 		return PTR_ERR(ul_rif);
@@ -7819,8 +7802,6 @@ int mlxsw_sp_router_ul_rif_get(struct mlxsw_sp *mlxsw_sp, u32 ul_tb_id,
 void mlxsw_sp_router_ul_rif_put(struct mlxsw_sp *mlxsw_sp, u16 ul_rif_index)
 {
 	struct mlxsw_sp_rif *ul_rif;
-
-	ASSERT_RTNL();
 
 	ul_rif = mlxsw_sp->router->rifs[ul_rif_index];
 	if (WARN_ON(!ul_rif))

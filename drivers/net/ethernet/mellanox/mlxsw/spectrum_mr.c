@@ -1001,14 +1001,12 @@ static void mlxsw_sp_mr_stats_update(struct work_struct *work)
 	struct mlxsw_sp_mr_route *mr_route;
 	unsigned long interval;
 
-	rtnl_lock();
 	mlxsw_sp_router_lock(mr->mlxsw_sp);
 	list_for_each_entry(mr_table, &mr->table_list, node)
 		list_for_each_entry(mr_route, &mr_table->route_list, node)
 			mlxsw_sp_mr_route_stats_update(mr_table->mlxsw_sp,
 						       mr_route);
 	mlxsw_sp_router_unlock(mr->mlxsw_sp);
-	rtnl_unlock();
 
 	interval = msecs_to_jiffies(MLXSW_SP_MR_ROUTES_COUNTER_UPDATE_INTERVAL);
 	mlxsw_core_schedule_dw(&mr->stats_update_dw, interval);
