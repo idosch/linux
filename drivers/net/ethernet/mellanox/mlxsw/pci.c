@@ -1323,10 +1323,13 @@ static void mlxsw_pci_mbox_free(struct mlxsw_pci *mlxsw_pci,
 }
 
 static int mlxsw_pci_sw_reset(struct mlxsw_pci *mlxsw_pci,
-			      const struct pci_device_id *id)
+			      const struct pci_device_id *id,
+			      char *mbox)
 {
 	unsigned long end;
 	char mrsr_pl[MLXSW_REG_MRSR_LEN];
+	unsigned int gb_timeout;
+	bool gb_wait = false;
 	int err;
 
 	mlxsw_reg_mrsr_pack(mrsr_pl);
@@ -1343,10 +1346,30 @@ static int mlxsw_pci_sw_reset(struct mlxsw_pci *mlxsw_pci,
 
 	end = jiffies + msecs_to_jiffies(MLXSW_PCI_SW_RESET_TIMEOUT_MSECS);
 	do {
-		u32 val = mlxsw_pci_read32(mlxsw_pci, FW_READY);
+		u32 fw_status = mlxsw_pci_read32(mlxsw_pci, FW_STATUS) &
+				MLXSW_PCI_FW_STATUS_MASK;
 
-		if ((val & MLXSW_PCI_FW_READY_MASK) == MLXSW_PCI_FW_READY_MAGIC)
+		switch (fw_status) {
+		case MLXSW_PCI_FW_STATUS_READY_MAGIC:
 			return 0;
+		case MLXSW_PCI_FW_STATUS_MAIN_READY_MAGIC:
+			if (gb_wait)
+				break;
+			err = mlxsw_cmd_query_fw(mlxsw_pci->core, mbox);
+			if (err)
+				return err;
+			dev_info(&mlxsw_pci->pdev->dev, "Waiting for gearboxes can take a while\n");
+			gb_wait = true;
+			gb_timeout = mlxsw_cmd_mbox_query_fw_status_gb_timeout_get(mbox);
+			end = jiffies + msecs_to_jiffies(gb_timeout);
+			break;
+		case MLXSW_PCI_FW_STATUS_GB_FATAL_ERR_MAGIC:
+			dev_err(&mlxsw_pci->pdev->dev, "One or more gearboxes have a fatal error\n");
+			return -EAGAIN;
+		default:
+			break;
+		}
+
 		cond_resched();
 	} while (time_before(jiffies, end));
 	return -EBUSY;
@@ -1394,7 +1417,7 @@ static int mlxsw_pci_init(void *bus_priv, struct mlxsw_core *mlxsw_core,
 	if (err)
 		goto err_out_mbox_alloc;
 
-	err = mlxsw_pci_sw_reset(mlxsw_pci, mlxsw_pci->id);
+	err = mlxsw_pci_sw_reset(mlxsw_pci, mlxsw_pci->id, mbox);
 	if (err)
 		goto err_sw_reset;
 

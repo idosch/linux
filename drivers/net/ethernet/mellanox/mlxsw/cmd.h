@@ -329,6 +329,10 @@ MLXSW_ITEM64(cmd_mbox, query_fw, free_running_clock_offset, 0x50, 0, 64);
  */
 MLXSW_ITEM32(cmd_mbox, query_fw, fr_rn_clk_bar, 0x58, 30, 2);
 
+/* cmd_mbox_query_fw_status_gb_timeout
+ */
+MLXSW_ITEM32(cmd_mbox, query_fw, status_gb_timeout, 0x6C, 0, 32);
+
 /* QUERY_BOARDINFO - Query Board Information
  * -----------------------------------------
  * OpMod == 0 (N/A), INMmod == 0 (N/A)
