@@ -9,6 +9,15 @@
 #include "reg.h"
 #include "spectrum.h"
 
+struct mlxsw_sp_trap_core {
+	const struct devlink_trap *traps_arr;
+	const struct mlxsw_listener *listeners_arr;
+	const u16 *listener_devlink_map;
+	struct mlxsw_sp *mlxsw_sp;
+	unsigned int traps_count;
+	unsigned int listeners_count;
+};
+
 /* All driver-specific traps must be documented in
  * Documentation/networking/devlink/mlxsw.rst
  */
@@ -319,6 +328,7 @@ static int mlxsw_sp_trap_dummy_group_init(struct mlxsw_sp *mlxsw_sp)
 int mlxsw_sp_devlink_traps_init(struct mlxsw_sp *mlxsw_sp)
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
+	struct mlxsw_sp_trap_core *trap_core;
 	int err;
 
 	err = mlxsw_sp_trap_cpu_policers_set(mlxsw_sp);
@@ -333,31 +343,53 @@ int mlxsw_sp_devlink_traps_init(struct mlxsw_sp *mlxsw_sp)
 		    ARRAY_SIZE(mlxsw_sp_listeners_arr)))
 		return -EINVAL;
 
-	return devlink_traps_register(devlink, mlxsw_sp_traps_arr,
-				      ARRAY_SIZE(mlxsw_sp_traps_arr),
-				      mlxsw_sp);
+	trap_core = kzalloc(sizeof(*trap_core), GFP_KERNEL);
+	if (!trap_core)
+		return -ENOMEM;
+	mlxsw_sp->trap_core = trap_core;
+	trap_core->mlxsw_sp = mlxsw_sp;
+
+	trap_core->traps_arr = mlxsw_sp_traps_arr;
+	trap_core->traps_count = ARRAY_SIZE(mlxsw_sp_traps_arr);
+	trap_core->listeners_arr = mlxsw_sp_listeners_arr;
+	trap_core->listener_devlink_map = mlxsw_sp_listener_devlink_map;
+	trap_core->listeners_count = ARRAY_SIZE(mlxsw_sp_listeners_arr);
+
+	err = devlink_traps_register(devlink, trap_core->traps_arr,
+				     trap_core->traps_count, mlxsw_sp);
+	if (err)
+		goto err_traps_register;
+
+	return 0;
+
+err_traps_register:
+	kfree(trap_core);
+	return err;
 }
 
 void mlxsw_sp_devlink_traps_fini(struct mlxsw_sp *mlxsw_sp)
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
 
-	devlink_traps_unregister(devlink, mlxsw_sp_traps_arr,
-				 ARRAY_SIZE(mlxsw_sp_traps_arr));
+	devlink_traps_unregister(devlink, mlxsw_sp->trap_core->traps_arr,
+				 mlxsw_sp->trap_core->traps_count);
+	kfree(mlxsw_sp->trap_core);
 }
 
 int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 		       const struct devlink_trap *trap, void *trap_ctx)
 {
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_listener_devlink_map); i++) {
+	for (i = 0; i < trap_core->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
 		int err;
 
-		if (mlxsw_sp_listener_devlink_map[i] != trap->id)
+		if (trap_core->listener_devlink_map[i] != trap->id)
 			continue;
-		listener = &mlxsw_sp_listeners_arr[i];
+		listener = &trap_core->listeners_arr[i];
 
 		err = mlxsw_core_trap_register(mlxsw_core, listener, trap_ctx);
 		if (err)
@@ -370,14 +402,16 @@ int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
 			const struct devlink_trap *trap, void *trap_ctx)
 {
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_listener_devlink_map); i++) {
+	for (i = 0; i < trap_core->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
 
-		if (mlxsw_sp_listener_devlink_map[i] != trap->id)
+		if (trap_core->listener_devlink_map[i] != trap->id)
 			continue;
-		listener = &mlxsw_sp_listeners_arr[i];
+		listener = &trap_core->listeners_arr[i];
 
 		mlxsw_core_trap_unregister(mlxsw_core, listener, trap_ctx);
 	}
@@ -387,16 +421,18 @@ int mlxsw_sp_trap_action_set(struct mlxsw_core *mlxsw_core,
 			     const struct devlink_trap *trap,
 			     enum devlink_trap_action action)
 {
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_listener_devlink_map); i++) {
+	for (i = 0; i < trap_core->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
 		bool enabled;
 		int err;
 
-		if (mlxsw_sp_listener_devlink_map[i] != trap->id)
+		if (trap_core->listener_devlink_map[i] != trap->id)
 			continue;
-		listener = &mlxsw_sp_listeners_arr[i];
+		listener = &trap_core->listeners_arr[i];
 		switch (action) {
 		case DEVLINK_TRAP_ACTION_DROP:
 			enabled = false;
