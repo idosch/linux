@@ -2,6 +2,7 @@
 /* Copyright (c) 2019 Mellanox Technologies. All rights reserved */
 
 #include <linux/kernel.h>
+#include <linux/list.h>
 #include <net/devlink.h>
 #include <uapi/linux/devlink.h>
 
@@ -16,6 +17,20 @@ struct mlxsw_sp_trap_core {
 	struct mlxsw_sp *mlxsw_sp;
 	unsigned int traps_count;
 	unsigned int listeners_count;
+	struct list_head trap_items_list; /* Protected by devlink locking */
+};
+
+struct mlxsw_sp_trap_item {
+	struct list_head list; /* Member of trap_items_list */
+	struct list_head listener_items_list;
+	struct mlxsw_sp_trap_core *trap_core;
+	const struct devlink_trap *trap;
+	void *trap_ctx;
+};
+
+struct mlxsw_sp_listener_item {
+	struct list_head list; /* Member of listener_items_list */
+	const struct mlxsw_listener *listener;
 };
 
 /* All driver-specific traps must be documented in
@@ -348,6 +363,7 @@ int mlxsw_sp_devlink_traps_init(struct mlxsw_sp *mlxsw_sp)
 		return -ENOMEM;
 	mlxsw_sp->trap_core = trap_core;
 	trap_core->mlxsw_sp = mlxsw_sp;
+	INIT_LIST_HEAD(&trap_core->trap_items_list);
 
 	trap_core->traps_arr = mlxsw_sp_traps_arr;
 	trap_core->traps_count = ARRAY_SIZE(mlxsw_sp_traps_arr);
@@ -373,7 +389,107 @@ void mlxsw_sp_devlink_traps_fini(struct mlxsw_sp *mlxsw_sp)
 
 	devlink_traps_unregister(devlink, mlxsw_sp->trap_core->traps_arr,
 				 mlxsw_sp->trap_core->traps_count);
+	WARN_ON(!list_empty(&mlxsw_sp->trap_core->trap_items_list));
 	kfree(mlxsw_sp->trap_core);
+}
+
+static struct mlxsw_sp_trap_item *
+mlxsw_sp_trap_item_lookup(struct mlxsw_sp *mlxsw_sp,
+			  const struct devlink_trap *trap)
+{
+	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
+	struct mlxsw_sp_trap_item *trap_item;
+
+	list_for_each_entry(trap_item, &trap_core->trap_items_list, list) {
+		if (trap_item->trap->id == trap->id)
+			return trap_item;
+	}
+
+	return NULL;
+}
+
+static int
+mlxsw_sp_trap_item_listeners_init(struct mlxsw_sp *mlxsw_sp,
+				  struct mlxsw_sp_trap_item *trap_item)
+{
+	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
+	struct mlxsw_sp_listener_item *listener_item, *tmp_item;
+	int i;
+
+	INIT_LIST_HEAD(&trap_item->listener_items_list);
+
+	for (i = 0; i < trap_core->listeners_count; i++) {
+		const struct mlxsw_listener *listener;
+
+		if (trap_core->listener_devlink_map[i] != trap_item->trap->id)
+			continue;
+		listener = &trap_core->listeners_arr[i];
+
+		listener_item = kzalloc(sizeof(*listener_item), GFP_KERNEL);
+		if (!listener_item)
+			goto err_listener_item_alloc;
+
+		listener_item->listener = listener;
+		list_add_tail(&listener_item->list,
+			      &trap_item->listener_items_list);
+	}
+
+	return 0;
+
+err_listener_item_alloc:
+	list_for_each_entry_safe(listener_item, tmp_item,
+				 &trap_item->listener_items_list, list) {
+		list_del(&listener_item->list);
+		kfree(listener_item);
+	}
+	return -ENOMEM;
+}
+
+static void
+mlxsw_sp_trap_item_listeners_fini(struct mlxsw_sp_trap_item *trap_item)
+{
+	struct mlxsw_sp_listener_item *listener_item, *tmp_item;
+
+	list_for_each_entry_safe(listener_item, tmp_item,
+				 &trap_item->listener_items_list, list) {
+		list_del(&listener_item->list);
+		kfree(listener_item);
+	}
+	WARN_ON(!list_empty(&trap_item->listener_items_list));
+}
+
+static struct mlxsw_sp_trap_item *
+mlxsw_sp_trap_item_create(struct mlxsw_sp *mlxsw_sp,
+			  const struct devlink_trap *trap, void *trap_ctx)
+{
+	struct mlxsw_sp_trap_item *trap_item;
+	int err;
+
+	trap_item = kzalloc(sizeof(*trap_item), GFP_KERNEL);
+	if (!trap_item)
+		return ERR_PTR(-ENOMEM);
+	trap_item->trap_core = mlxsw_sp->trap_core;
+	trap_item->trap = trap;
+	trap_item->trap_ctx = trap_ctx;
+
+	err = mlxsw_sp_trap_item_listeners_init(mlxsw_sp, trap_item);
+	if (err)
+		goto err_listeners_init;
+
+	list_add_tail(&trap_item->list, &mlxsw_sp->trap_core->trap_items_list);
+
+	return trap_item;
+
+err_listeners_init:
+	kfree(trap_item);
+	return ERR_PTR(err);
+}
+
+static void mlxsw_sp_trap_item_destroy(struct mlxsw_sp_trap_item *trap_item)
+{
+	list_del(&trap_item->list);
+	mlxsw_sp_trap_item_listeners_fini(trap_item);
+	kfree(trap_item);
 }
 
 int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
@@ -381,11 +497,15 @@ int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
 	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
-	int i;
+	struct mlxsw_sp_trap_item *trap_item;
+	int err, i;
+
+	trap_item = mlxsw_sp_trap_item_create(mlxsw_sp, trap, trap_ctx);
+	if (IS_ERR(trap_item))
+		return PTR_ERR(trap_item);
 
 	for (i = 0; i < trap_core->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
-		int err;
 
 		if (trap_core->listener_devlink_map[i] != trap->id)
 			continue;
@@ -393,10 +513,14 @@ int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 
 		err = mlxsw_core_trap_register(mlxsw_core, listener, trap_ctx);
 		if (err)
-			return err;
+			goto err_trap_register;
 	}
 
 	return 0;
+
+err_trap_register:
+	mlxsw_sp_trap_item_destroy(trap_item);
+	return err;
 }
 
 void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
@@ -404,7 +528,12 @@ void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
 	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
+	struct mlxsw_sp_trap_item *trap_item;
 	int i;
+
+	trap_item = mlxsw_sp_trap_item_lookup(mlxsw_sp, trap);
+	if (WARN_ON(!trap_item))
+		return;
 
 	for (i = 0; i < trap_core->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
@@ -415,6 +544,8 @@ void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
 
 		mlxsw_core_trap_unregister(mlxsw_core, listener, trap_ctx);
 	}
+
+	mlxsw_sp_trap_item_destroy(trap_item);
 }
 
 int mlxsw_sp_trap_action_set(struct mlxsw_core *mlxsw_core,
