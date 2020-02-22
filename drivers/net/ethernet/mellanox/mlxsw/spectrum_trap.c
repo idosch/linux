@@ -24,6 +24,7 @@ struct mlxsw_sp_trap_item {
 	struct list_head list; /* Member of trap_items_list */
 	struct list_head listener_items_list;
 	struct mlxsw_sp_trap_core *trap_core;
+	const struct mlxsw_sp_trap_item_ops *ops;
 	const struct devlink_trap *trap;
 	void *trap_ctx;
 };
@@ -31,6 +32,13 @@ struct mlxsw_sp_trap_item {
 struct mlxsw_sp_listener_item {
 	struct list_head list; /* Member of listener_items_list */
 	const struct mlxsw_listener *listener;
+};
+
+struct mlxsw_sp_trap_item_ops {
+	int (*init)(struct mlxsw_sp_trap_item *trap_item);
+	void (*fini)(struct mlxsw_sp_trap_item *trap_item);
+	int (*action_set)(struct mlxsw_sp_trap_item *trap_item,
+			  enum devlink_trap_action action);
 };
 
 /* All driver-specific traps must be documented in
@@ -309,6 +317,93 @@ static const u16 mlxsw_sp_listener_devlink_map[] = {
 	DEVLINK_TRAP_GENERIC_ID_EGRESS_FLOW_ACTION_DROP,
 };
 
+static int
+mlxsw_sp_trap_item_default_init(struct mlxsw_sp_trap_item *trap_item)
+{
+	struct mlxsw_sp *mlxsw_sp = trap_item->trap_core->mlxsw_sp;
+	struct mlxsw_sp_listener_item *listener_item;
+	int err;
+
+	list_for_each_entry(listener_item, &trap_item->listener_items_list,
+			    list) {
+		err = mlxsw_core_trap_register(mlxsw_sp->core,
+					       listener_item->listener,
+					       trap_item->trap_ctx);
+		if (err)
+			goto err_trap_register;
+	}
+
+	return 0;
+
+err_trap_register:
+	list_for_each_entry_continue_reverse(listener_item,
+					     &trap_item->listener_items_list,
+					     list)
+		mlxsw_core_trap_unregister(mlxsw_sp->core,
+					   listener_item->listener,
+					   trap_item->trap_ctx);
+	return err;
+}
+
+static void
+mlxsw_sp_trap_item_default_fini(struct mlxsw_sp_trap_item *trap_item)
+{
+	struct mlxsw_sp *mlxsw_sp = trap_item->trap_core->mlxsw_sp;
+	struct mlxsw_sp_listener_item *listener_item;
+
+	list_for_each_entry(listener_item, &trap_item->listener_items_list,
+			    list)
+		mlxsw_core_trap_unregister(mlxsw_sp->core,
+					   listener_item->listener,
+					   trap_item->trap_ctx);
+}
+
+static int
+mlxsw_sp_trap_item_default_action_set(struct mlxsw_sp_trap_item *trap_item,
+				      enum devlink_trap_action action)
+{
+	struct mlxsw_sp *mlxsw_sp = trap_item->trap_core->mlxsw_sp;
+	struct mlxsw_sp_listener_item *listener_item;
+	bool enabled;
+	int err;
+
+	switch (action) {
+	case DEVLINK_TRAP_ACTION_DROP:
+		enabled = false;
+		break;
+	case DEVLINK_TRAP_ACTION_TRAP:
+		enabled = true;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	list_for_each_entry(listener_item, &trap_item->listener_items_list,
+			    list) {
+		err = mlxsw_core_trap_state_set(mlxsw_sp->core,
+						listener_item->listener,
+						enabled);
+		if (err)
+			goto err_trap_state_set;
+	}
+
+	return 0;
+
+err_trap_state_set:
+	list_for_each_entry_continue_reverse(listener_item,
+					     &trap_item->listener_items_list,
+					     list)
+		mlxsw_core_trap_state_set(mlxsw_sp->core,
+					  listener_item->listener, !enabled);
+	return err;
+}
+
+static const struct mlxsw_sp_trap_item_ops mlxsw_sp_trap_item_default_ops = {
+	.init			= mlxsw_sp_trap_item_default_init,
+	.fini			= mlxsw_sp_trap_item_default_fini,
+	.action_set		= mlxsw_sp_trap_item_default_action_set,
+};
+
 #define MLXSW_SP_DISCARD_POLICER_ID	(MLXSW_REG_HTGT_TRAP_GROUP_MAX + 1)
 #define MLXSW_SP_THIN_POLICER_ID	(MLXSW_SP_DISCARD_POLICER_ID + 1)
 
@@ -469,6 +564,7 @@ mlxsw_sp_trap_item_create(struct mlxsw_sp *mlxsw_sp,
 	if (!trap_item)
 		return ERR_PTR(-ENOMEM);
 	trap_item->trap_core = mlxsw_sp->trap_core;
+	trap_item->ops = &mlxsw_sp_trap_item_default_ops;
 	trap_item->trap = trap;
 	trap_item->trap_ctx = trap_ctx;
 
@@ -496,29 +592,20 @@ int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 		       const struct devlink_trap *trap, void *trap_ctx)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
-	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
 	struct mlxsw_sp_trap_item *trap_item;
-	int err, i;
+	int err;
 
 	trap_item = mlxsw_sp_trap_item_create(mlxsw_sp, trap, trap_ctx);
 	if (IS_ERR(trap_item))
 		return PTR_ERR(trap_item);
 
-	for (i = 0; i < trap_core->listeners_count; i++) {
-		const struct mlxsw_listener *listener;
-
-		if (trap_core->listener_devlink_map[i] != trap->id)
-			continue;
-		listener = &trap_core->listeners_arr[i];
-
-		err = mlxsw_core_trap_register(mlxsw_core, listener, trap_ctx);
-		if (err)
-			goto err_trap_register;
-	}
+	err = trap_item->ops->init(trap_item);
+	if (err)
+		goto err_trap_item_init;
 
 	return 0;
 
-err_trap_register:
+err_trap_item_init:
 	mlxsw_sp_trap_item_destroy(trap_item);
 	return err;
 }
@@ -527,24 +614,13 @@ void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
 			const struct devlink_trap *trap, void *trap_ctx)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
-	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
 	struct mlxsw_sp_trap_item *trap_item;
-	int i;
 
 	trap_item = mlxsw_sp_trap_item_lookup(mlxsw_sp, trap);
 	if (WARN_ON(!trap_item))
 		return;
 
-	for (i = 0; i < trap_core->listeners_count; i++) {
-		const struct mlxsw_listener *listener;
-
-		if (trap_core->listener_devlink_map[i] != trap->id)
-			continue;
-		listener = &trap_core->listeners_arr[i];
-
-		mlxsw_core_trap_unregister(mlxsw_core, listener, trap_ctx);
-	}
-
+	trap_item->ops->fini(trap_item);
 	mlxsw_sp_trap_item_destroy(trap_item);
 }
 
@@ -553,33 +629,13 @@ int mlxsw_sp_trap_action_set(struct mlxsw_core *mlxsw_core,
 			     enum devlink_trap_action action)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
-	struct mlxsw_sp_trap_core *trap_core = mlxsw_sp->trap_core;
-	int i;
+	struct mlxsw_sp_trap_item *trap_item;
 
-	for (i = 0; i < trap_core->listeners_count; i++) {
-		const struct mlxsw_listener *listener;
-		bool enabled;
-		int err;
+	trap_item = mlxsw_sp_trap_item_lookup(mlxsw_sp, trap);
+	if (WARN_ON(!trap_item))
+		return -EINVAL;
 
-		if (trap_core->listener_devlink_map[i] != trap->id)
-			continue;
-		listener = &trap_core->listeners_arr[i];
-		switch (action) {
-		case DEVLINK_TRAP_ACTION_DROP:
-			enabled = false;
-			break;
-		case DEVLINK_TRAP_ACTION_TRAP:
-			enabled = true;
-			break;
-		default:
-			return -EINVAL;
-		}
-		err = mlxsw_core_trap_state_set(mlxsw_core, listener, enabled);
-		if (err)
-			return err;
-	}
-
-	return 0;
+	return trap_item->ops->action_set(trap_item, action);
 }
 
 int mlxsw_sp_trap_group_init(struct mlxsw_core *mlxsw_core,
