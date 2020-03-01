@@ -159,11 +159,11 @@ static void mlxsw_sp_rx_exception_listener(struct sk_buff *skb, u8 local_port,
 #define MLXSW_SP_RXL_ACL_DISCARD(_id, _en_group_id, _dis_group_id)	      \
 	MLXSW_RXL_DIS(mlxsw_sp_rx_acl_drop_listener, DISCARD_##_id,	      \
 		      TRAP_EXCEPTION_TO_CPU, false, SP_##_en_group_id,	      \
-		      SET_FW_DEFAULT, SP_##_dis_group_id)
+		      DISCARD, SP_##_dis_group_id)
 
 #define MLXSW_SP_RXL_EXCEPTION(_id, _group_id, _action)			      \
 	MLXSW_RXL(mlxsw_sp_rx_exception_listener, _id,			      \
-		   _action, false, SP_##_group_id, SET_FW_DEFAULT)
+		   _action, false, SP_##_group_id, DISCARD)
 
 static const struct devlink_trap_group mlxsw_sp_trap_groups_arr[] = {
 	DEVLINK_TRAP_GROUP_GENERIC(L2_DROPS),
