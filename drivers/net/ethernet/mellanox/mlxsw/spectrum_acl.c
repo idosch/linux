@@ -638,6 +638,24 @@ int mlxsw_sp_acl_rulei_act_vlan(struct mlxsw_sp *mlxsw_sp,
 	}
 }
 
+int mlxsw_sp_acl_rulei_act_priority(struct mlxsw_sp *mlxsw_sp,
+				    struct mlxsw_sp_acl_rule_info *rulei,
+				    u32 prio, struct netlink_ext_ack *extack)
+{
+	/* Linux supports 16 basic priorities and can also encode class ID into
+	 * skb_priority. Spectrum switches support 16 priorities. mlxsw however
+	 * supports only priorities 0..7, so bounce anything above that.
+	 */
+	if (prio >= IEEE_8021QAZ_MAX_TCS) {
+		NL_SET_ERR_MSG_MOD(extack, "Only priorities 0..7 are supported");
+		dev_err(mlxsw_sp->bus_info->dev, "Priority %#x not supported, only priorities 0..7 are allowed\n",
+			prio);
+		return -EINVAL;
+	}
+	return mlxsw_afa_block_append_qos_switch_prio(rulei->act_block, prio,
+						      extack);
+}
+
 int mlxsw_sp_acl_rulei_act_count(struct mlxsw_sp *mlxsw_sp,
 				 struct mlxsw_sp_acl_rule_info *rulei,
 				 struct netlink_ext_ack *extack)
