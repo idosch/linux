@@ -244,6 +244,14 @@ be added to the following table:
    * - ``egress_flow_action_drop``
      - ``drop``
      - Traps packets dropped during processing of egress flow action drop
+   * - ``early_drop``
+     - ``drop``
+     - Traps packets dropped due to the RED (Random Early Detection) algorithm
+       (i.e., early drops)
+   * - ``ecn_mark``
+     - ``drop``
+     - Traps ECN-capable packets that were marked with CE (Congestion
+       Encountered) code point by RED algorithm instead of being dropped
 
 Driver-specific Packet Traps
 ============================
