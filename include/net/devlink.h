@@ -645,6 +645,8 @@ enum devlink_trap_generic_id {
 	DEVLINK_TRAP_GENERIC_ID_OVERLAY_SMAC_MC,
 	DEVLINK_TRAP_GENERIC_ID_INGRESS_FLOW_ACTION_DROP,
 	DEVLINK_TRAP_GENERIC_ID_EGRESS_FLOW_ACTION_DROP,
+	DEVLINK_TRAP_GENERIC_ID_EARLY_DROP,
+	DEVLINK_TRAP_GENERIC_ID_ECN_MARK,
 
 	/* Add new generic trap IDs above */
 	__DEVLINK_TRAP_GENERIC_ID_MAX,
@@ -725,6 +727,10 @@ enum devlink_trap_group_generic_id {
 	"ingress_flow_action_drop"
 #define DEVLINK_TRAP_GENERIC_NAME_EGRESS_FLOW_ACTION_DROP \
 	"egress_flow_action_drop"
+#define DEVLINK_TRAP_GENERIC_NAME_EARLY_DROP \
+	"early_drop"
+#define DEVLINK_TRAP_GENERIC_NAME_ECN_MARK \
+	"ecn_mark"
 
 #define DEVLINK_TRAP_GROUP_GENERIC_NAME_L2_DROPS \
 	"l2_drops"
