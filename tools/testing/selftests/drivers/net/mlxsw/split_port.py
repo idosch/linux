@@ -29,6 +29,10 @@ class SPC2:
     max_capacity = 128
 
 
+class SPC3:
+    max_capacity = 128
+
+
 Port = collections.namedtuple('Port', 'bus_info name')
 
 
@@ -82,7 +86,7 @@ class switch_config(object):
         TBD: Adjust to upstream.
         """
 
-        chip_types = {"cb84": SPC, "cf6c": SPC2}
+        chip_types = {"cb84": SPC, "cf6c": SPC2, "cf70": SPC3}
         VENDOR_ID = "15b3"
 
         cmd = "lspci -n | grep %s:" % VENDOR_ID
@@ -108,11 +112,17 @@ class switch_config(object):
         For example: if swp1 supports 1,2,4 lanes it will be shown only in 4.
         """
 
-        max_lanes_dict = {1: [], 2: [], 4: []}
+        if isinstance(self.get_asic_type(), SPC3):
+            max_lanes_dict = {1: [], 2: [], 4: [], 8: []}
+        else:
+            max_lanes_dict = {1: [], 2: [], 4: []}
 
         for dev in self.get_if_names():
-            lane = get_max_lanes(dev.name)
-            max_lanes_dict[lane].append(dev)
+            if isinstance(self.get_asic_type(), SPC3):
+                max_lanes_dict[8].append(dev)
+            else:
+                lane = get_max_lanes(dev.name)
+                max_lanes_dict[lane].append(dev)
 
         return max_lanes_dict
 
@@ -236,7 +246,8 @@ def exists_and_width(m, devs, lanes):
             print("dev %s doesn't exist in the switch" % dev)
             return False
         if get_max_lanes(dev) != lanes:
-            print("dev %s has %d lanes, but %s were expected" % (dev, lanes))
+            print("dev %s has %d lanes, but %s were expected" \
+                  % (dev, lanes, get_max_lanes(dev)))
             return False
     return True
 
