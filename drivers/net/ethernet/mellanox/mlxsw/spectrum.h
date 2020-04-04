@@ -1044,6 +1044,10 @@ mlxsw_sp_trap_policer_counter_get(struct mlxsw_core *mlxsw_core,
 int mlxsw_sp_span_agent_get(struct mlxsw_sp *mlxsw_sp,
 			    const struct net_device *to_dev, int *p_span_id);
 void mlxsw_sp_span_agent_put(struct mlxsw_sp *mlxsw_sp, int span_id);
+int mlxsw_sp_span_analyzed_port_get(struct mlxsw_sp_port *mlxsw_sp_port,
+				    bool egress);
+void mlxsw_sp_span_analyzed_port_put(struct mlxsw_sp_port *mlxsw_sp_port,
+				     bool egress);
 
 static inline struct net *mlxsw_sp_net(struct mlxsw_sp *mlxsw_sp)
 {

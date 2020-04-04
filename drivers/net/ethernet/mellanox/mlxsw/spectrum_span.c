@@ -3,6 +3,7 @@
 
 #include <linux/if_bridge.h>
 #include <linux/list.h>
+#include <linux/mutex.h>
 #include <linux/refcount.h>
 #include <linux/rtnetlink.h>
 #include <linux/workqueue.h>
@@ -20,9 +21,18 @@
 struct mlxsw_sp_span {
 	struct work_struct work;
 	struct mlxsw_sp *mlxsw_sp;
+	struct list_head analyzed_ports_list;
+	struct mutex analyzed_ports_lock; /* Protects analyzed_ports_list */
 	atomic_t active_entries_count;
 	int entries_count;
 	struct mlxsw_sp_span_entry entries[0];
+};
+
+struct mlxsw_sp_span_analyzed_port {
+	struct list_head list; /* Member of analyzed_ports_list */
+	refcount_t ref_count;
+	u8 local_port;
+	bool egress;
 };
 
 static void mlxsw_sp_span_respin_work(struct work_struct *work);
@@ -49,6 +59,8 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 		return -ENOMEM;
 	span->entries_count = entries_count;
 	atomic_set(&span->active_entries_count, 0);
+	mutex_init(&span->analyzed_ports_lock);
+	INIT_LIST_HEAD(&span->analyzed_ports_list);
 	span->mlxsw_sp = mlxsw_sp;
 	mlxsw_sp->span = span;
 
@@ -79,6 +91,8 @@ void mlxsw_sp_span_fini(struct mlxsw_sp *mlxsw_sp)
 
 		WARN_ON_ONCE(!list_empty(&curr->bound_ports_list));
 	}
+	WARN_ON_ONCE(!list_empty(&mlxsw_sp->span->analyzed_ports_list));
+	mutex_destroy(&mlxsw_sp->span->analyzed_ports_lock);
 	kfree(mlxsw_sp->span);
 }
 
@@ -1070,4 +1084,129 @@ void mlxsw_sp_span_agent_put(struct mlxsw_sp *mlxsw_sp, int span_id)
 		return;
 
 	mlxsw_sp_span_entry_put(mlxsw_sp, span_entry);
+}
+
+static struct mlxsw_sp_span_analyzed_port *
+mlxsw_sp_span_analyzed_port_find(struct mlxsw_sp_span *span, u8 local_port,
+				 bool egress)
+{
+	struct mlxsw_sp_span_analyzed_port *analyzed_port;
+
+	list_for_each_entry(analyzed_port, &span->analyzed_ports_list, list) {
+		if (analyzed_port->local_port == local_port &&
+		    analyzed_port->egress == egress)
+			return analyzed_port;
+	}
+
+	return NULL;
+}
+
+static struct mlxsw_sp_span_analyzed_port *
+mlxsw_sp_span_analyzed_port_create(struct mlxsw_sp_span *span,
+				   struct mlxsw_sp_port *mlxsw_sp_port,
+				   bool egress)
+{
+	struct mlxsw_sp_span_analyzed_port *analyzed_port;
+	int err;
+
+	analyzed_port = kzalloc(sizeof(*analyzed_port), GFP_KERNEL);
+	if (!analyzed_port)
+		return ERR_PTR(-ENOMEM);
+
+	refcount_set(&analyzed_port->ref_count, 1);
+	analyzed_port->local_port = mlxsw_sp_port->local_port;
+	analyzed_port->egress = egress;
+	list_add_tail(&analyzed_port->list, &span->analyzed_ports_list);
+
+	if (!egress)
+		goto out;
+
+	/* An egress mirror buffer should be allocated on the egress port which
+	 * does the mirroring.
+	 */
+	err = mlxsw_sp_span_port_buffsize_update(mlxsw_sp_port,
+						 mlxsw_sp_port->dev->mtu);
+	if (err)
+		goto err_buffsize_update;
+
+out:
+	return analyzed_port;
+
+err_buffsize_update:
+	list_del(&analyzed_port->list);
+	kfree(analyzed_port);
+	return ERR_PTR(err);
+}
+
+static void
+mlxsw_sp_span_analyzed_port_destroy(struct mlxsw_sp_span *span,
+				    struct mlxsw_sp_span_analyzed_port *
+				    analyzed_port)
+{
+	struct mlxsw_sp *mlxsw_sp = span->mlxsw_sp;
+	char sbib_pl[MLXSW_REG_SBIB_LEN];
+
+	if (!analyzed_port->egress)
+		goto out;
+
+	/* Remove egress mirror buffer now that port is no longer analyzed
+	 * at egress.
+	 */
+	mlxsw_reg_sbib_pack(sbib_pl, analyzed_port->local_port, 0);
+	mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sbib), sbib_pl);
+
+out:
+	list_del(&analyzed_port->list);
+	kfree(analyzed_port);
+}
+
+int mlxsw_sp_span_analyzed_port_get(struct mlxsw_sp_port *mlxsw_sp_port,
+				    bool egress)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_span_analyzed_port *analyzed_port;
+	u8 local_port = mlxsw_sp_port->local_port;
+	int err = 0;
+
+	mutex_lock(&mlxsw_sp->span->analyzed_ports_lock);
+
+	analyzed_port = mlxsw_sp_span_analyzed_port_find(mlxsw_sp->span,
+							 local_port, egress);
+	if (analyzed_port) {
+		refcount_inc(&analyzed_port->ref_count);
+		goto out_unlock;
+	}
+
+	analyzed_port = mlxsw_sp_span_analyzed_port_create(mlxsw_sp->span,
+							   mlxsw_sp_port,
+							   egress);
+	if (IS_ERR(analyzed_port))
+		err = PTR_ERR(analyzed_port);
+
+out_unlock:
+	mutex_unlock(&mlxsw_sp->span->analyzed_ports_lock);
+	return err;
+}
+
+void mlxsw_sp_span_analyzed_port_put(struct mlxsw_sp_port *mlxsw_sp_port,
+				     bool egress)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_span_analyzed_port *analyzed_port;
+	u8 local_port = mlxsw_sp_port->local_port;
+
+	mutex_lock(&mlxsw_sp->span->analyzed_ports_lock);
+
+	analyzed_port = mlxsw_sp_span_analyzed_port_find(mlxsw_sp->span,
+							 local_port, egress);
+	if (WARN_ON_ONCE(!analyzed_port))
+		goto out_unlock;
+
+	if (!refcount_dec_and_test(&analyzed_port->ref_count))
+		goto out_unlock;
+
+	mlxsw_sp_span_analyzed_port_destroy(mlxsw_sp->span, analyzed_port);
+
+out_unlock:
+	mutex_unlock(&mlxsw_sp->span->analyzed_ports_lock);
 }
