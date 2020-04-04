@@ -1041,6 +1041,15 @@ mlxsw_sp_trap_policer_counter_get(struct mlxsw_core *mlxsw_core,
 				  u64 *p_drops);
 
 /* spectrum_span.c */
+enum mlxsw_sp_span_trigger {
+	MLXSW_SP_SPAN_TRIGGER_INGRESS,
+	MLXSW_SP_SPAN_TRIGGER_EGRESS,
+};
+
+struct mlxsw_sp_span_bind_parms {
+	int span_id;
+};
+
 int mlxsw_sp_span_agent_get(struct mlxsw_sp *mlxsw_sp,
 			    const struct net_device *to_dev, int *p_span_id);
 void mlxsw_sp_span_agent_put(struct mlxsw_sp *mlxsw_sp, int span_id);
@@ -1048,6 +1057,14 @@ int mlxsw_sp_span_analyzed_port_get(struct mlxsw_sp_port *mlxsw_sp_port,
 				    bool egress);
 void mlxsw_sp_span_analyzed_port_put(struct mlxsw_sp_port *mlxsw_sp_port,
 				     bool egress);
+int mlxsw_sp_span_agent_bind(struct mlxsw_sp *mlxsw_sp,
+			     enum mlxsw_sp_span_trigger trigger,
+			     struct mlxsw_sp_port *mlxsw_sp_port,
+			     const struct mlxsw_sp_span_bind_parms *parms);
+void mlxsw_sp_span_agent_unbind(struct mlxsw_sp *mlxsw_sp,
+				enum mlxsw_sp_span_trigger trigger,
+				struct mlxsw_sp_port *mlxsw_sp_port,
+				const struct mlxsw_sp_span_bind_parms *parms);
 
 static inline struct net *mlxsw_sp_net(struct mlxsw_sp *mlxsw_sp)
 {

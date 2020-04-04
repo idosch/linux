@@ -23,6 +23,7 @@ struct mlxsw_sp_span {
 	struct mlxsw_sp *mlxsw_sp;
 	struct list_head analyzed_ports_list;
 	struct mutex analyzed_ports_lock; /* Protects analyzed_ports_list */
+	struct list_head bind_entries_list;
 	atomic_t active_entries_count;
 	int entries_count;
 	struct mlxsw_sp_span_entry entries[0];
@@ -33,6 +34,14 @@ struct mlxsw_sp_span_analyzed_port {
 	refcount_t ref_count;
 	u8 local_port;
 	bool egress;
+};
+
+struct mlxsw_sp_span_bind_entry {
+	struct list_head list; /* Member of bind_entries_list */
+	refcount_t ref_count;
+	u8 local_port;
+	enum mlxsw_sp_span_trigger trigger;
+	struct mlxsw_sp_span_bind_parms parms;
 };
 
 static void mlxsw_sp_span_respin_work(struct work_struct *work);
@@ -64,6 +73,7 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 	atomic_set(&span->active_entries_count, 0);
 	mutex_init(&span->analyzed_ports_lock);
 	INIT_LIST_HEAD(&span->analyzed_ports_list);
+	INIT_LIST_HEAD(&span->bind_entries_list);
 	span->mlxsw_sp = mlxsw_sp;
 	mlxsw_sp->span = span;
 
@@ -94,6 +104,7 @@ void mlxsw_sp_span_fini(struct mlxsw_sp *mlxsw_sp)
 
 		WARN_ON_ONCE(!list_empty(&curr->bound_ports_list));
 	}
+	WARN_ON_ONCE(!list_empty(&mlxsw_sp->span->bind_entries_list));
 	WARN_ON_ONCE(!list_empty(&mlxsw_sp->span->analyzed_ports_list));
 	mutex_destroy(&mlxsw_sp->span->analyzed_ports_lock);
 	kfree(mlxsw_sp->span);
@@ -1210,4 +1221,132 @@ void mlxsw_sp_span_analyzed_port_put(struct mlxsw_sp_port *mlxsw_sp_port,
 
 out_unlock:
 	mutex_unlock(&mlxsw_sp->span->analyzed_ports_lock);
+}
+
+static struct mlxsw_sp_span_bind_entry *
+mlxsw_sp_span_bind_entry_find(struct mlxsw_sp_span *span,
+			      enum mlxsw_sp_span_trigger trigger,
+			      struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp_span_bind_entry *bind_entry;
+
+	list_for_each_entry(bind_entry, &span->bind_entries_list, list) {
+		if (bind_entry->trigger == trigger &&
+		    bind_entry->local_port == mlxsw_sp_port->local_port)
+			return bind_entry;
+	}
+
+	return NULL;
+}
+
+static int
+mlxsw_sp_span_bind_entry_enable_set(struct mlxsw_sp_span *span,
+				    struct mlxsw_sp_span_bind_entry *bind_entry,
+				    bool enable)
+{
+	char mpar_pl[MLXSW_REG_MPAR_LEN];
+	enum mlxsw_reg_mpar_i_e i_e;
+
+	switch (bind_entry->trigger) {
+	case MLXSW_SP_SPAN_TRIGGER_INGRESS:
+		i_e = MLXSW_REG_MPAR_TYPE_INGRESS;
+		break;
+	case MLXSW_SP_SPAN_TRIGGER_EGRESS:
+		i_e = MLXSW_REG_MPAR_TYPE_EGRESS;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	mlxsw_reg_mpar_pack(mpar_pl, bind_entry->local_port, i_e, enable,
+			    bind_entry->parms.span_id);
+	return mlxsw_reg_write(span->mlxsw_sp->core, MLXSW_REG(mpar), mpar_pl);
+}
+
+static struct mlxsw_sp_span_bind_entry *
+mlxsw_sp_span_bind_entry_create(struct mlxsw_sp_span *span,
+				enum mlxsw_sp_span_trigger trigger,
+				struct mlxsw_sp_port *mlxsw_sp_port,
+				const struct mlxsw_sp_span_bind_parms *parms)
+{
+	struct mlxsw_sp_span_bind_entry *bind_entry;
+	int err;
+
+	bind_entry = kzalloc(sizeof(*bind_entry), GFP_KERNEL);
+	if (!bind_entry)
+		return ERR_PTR(-ENOMEM);
+
+	refcount_set(&bind_entry->ref_count, 1);
+	bind_entry->local_port = mlxsw_sp_port->local_port;
+	bind_entry->trigger = trigger;
+	memcpy(&bind_entry->parms, parms, sizeof(*parms));
+	list_add_tail(&bind_entry->list, &span->bind_entries_list);
+
+	err = mlxsw_sp_span_bind_entry_enable_set(span, bind_entry, true);
+	if (err)
+		goto err_bind_entry_enable;
+
+	return bind_entry;
+
+err_bind_entry_enable:
+	list_del(&bind_entry->list);
+	kfree(bind_entry);
+	return ERR_PTR(err);
+}
+
+static void
+mlxsw_sp_span_bind_entry_destroy(struct mlxsw_sp_span *span,
+				 struct mlxsw_sp_span_bind_entry *bind_entry)
+{
+	mlxsw_sp_span_bind_entry_enable_set(span, bind_entry, false);
+	list_del(&bind_entry->list);
+	kfree(bind_entry);
+}
+
+int mlxsw_sp_span_agent_bind(struct mlxsw_sp *mlxsw_sp,
+			     enum mlxsw_sp_span_trigger trigger,
+			     struct mlxsw_sp_port *mlxsw_sp_port,
+			     const struct mlxsw_sp_span_bind_parms *parms)
+{
+	struct mlxsw_sp_span_bind_entry *bind_entry;
+	int err = 0;
+
+	ASSERT_RTNL();
+
+	bind_entry = mlxsw_sp_span_bind_entry_find(mlxsw_sp->span, trigger,
+						   mlxsw_sp_port);
+	if (bind_entry) {
+		if (bind_entry->parms.span_id != parms->span_id)
+			return -EINVAL;
+		refcount_inc(&bind_entry->ref_count);
+		goto out;
+	}
+
+	bind_entry = mlxsw_sp_span_bind_entry_create(mlxsw_sp->span, trigger,
+						     mlxsw_sp_port, parms);
+	if (IS_ERR(bind_entry))
+		err = PTR_ERR(bind_entry);
+
+out:
+	return err;
+}
+
+void mlxsw_sp_span_agent_unbind(struct mlxsw_sp *mlxsw_sp,
+				enum mlxsw_sp_span_trigger trigger,
+				struct mlxsw_sp_port *mlxsw_sp_port,
+				const struct mlxsw_sp_span_bind_parms *parms)
+{
+	struct mlxsw_sp_span_bind_entry *bind_entry;
+
+	ASSERT_RTNL();
+
+	bind_entry = mlxsw_sp_span_bind_entry_find(mlxsw_sp->span, trigger,
+						   mlxsw_sp_port);
+	if (WARN_ON_ONCE(!bind_entry))
+		return;
+
+	if (!refcount_dec_and_test(&bind_entry->ref_count))
+		return;
+
+	mlxsw_sp_span_bind_entry_destroy(mlxsw_sp->span, bind_entry);
 }
