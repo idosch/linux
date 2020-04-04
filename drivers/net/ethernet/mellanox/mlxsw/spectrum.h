@@ -1040,6 +1040,11 @@ mlxsw_sp_trap_policer_counter_get(struct mlxsw_core *mlxsw_core,
 				  const struct devlink_trap_policer *policer,
 				  u64 *p_drops);
 
+/* spectrum_span.c */
+int mlxsw_sp_span_agent_get(struct mlxsw_sp *mlxsw_sp,
+			    const struct net_device *to_dev, int *p_span_id);
+void mlxsw_sp_span_agent_put(struct mlxsw_sp *mlxsw_sp, int span_id);
+
 static inline struct net *mlxsw_sp_net(struct mlxsw_sp *mlxsw_sp)
 {
 	return mlxsw_core_net(mlxsw_sp->core);
