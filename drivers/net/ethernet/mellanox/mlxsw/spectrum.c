@@ -1380,29 +1380,59 @@ mlxsw_sp_port_add_cls_matchall_mirror(struct mlxsw_sp_port *mlxsw_sp_port,
 				      const struct flow_action_entry *act,
 				      bool ingress)
 {
-	enum mlxsw_sp_span_type span_type;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_span_bind_parms parms;
+	enum mlxsw_sp_span_trigger trigger;
+	int span_id;
+	int err;
 
 	if (!act->dev) {
 		netdev_err(mlxsw_sp_port->dev, "Could not find requested device\n");
 		return -EINVAL;
 	}
 
+	err = mlxsw_sp_span_agent_get(mlxsw_sp, act->dev, &span_id);
+	if (err)
+		return err;
+
+	err = mlxsw_sp_span_analyzed_port_get(mlxsw_sp_port, !ingress);
+	if (err)
+		goto err_analyzed_port_get;
+
+	trigger = ingress ? MLXSW_SP_SPAN_TRIGGER_INGRESS :
+			    MLXSW_SP_SPAN_TRIGGER_EGRESS;
+	parms.span_id = span_id;
+	err = mlxsw_sp_span_agent_bind(mlxsw_sp, trigger, mlxsw_sp_port,
+				       &parms);
+	if (err)
+		goto err_agent_bind;
+
 	mirror->ingress = ingress;
-	span_type = ingress ? MLXSW_SP_SPAN_INGRESS : MLXSW_SP_SPAN_EGRESS;
-	return mlxsw_sp_span_mirror_add(mlxsw_sp_port, act->dev, span_type,
-					true, &mirror->span_id);
+	mirror->span_id = span_id;
+
+	return 0;
+
+err_agent_bind:
+	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, !ingress);
+err_analyzed_port_get:
+	mlxsw_sp_span_agent_put(mlxsw_sp, span_id);
+	return err;
 }
 
 static void
 mlxsw_sp_port_del_cls_matchall_mirror(struct mlxsw_sp_port *mlxsw_sp_port,
 				      struct mlxsw_sp_port_mall_mirror_tc_entry *mirror)
 {
-	enum mlxsw_sp_span_type span_type;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	struct mlxsw_sp_span_bind_parms parms;
+	enum mlxsw_sp_span_trigger trigger;
 
-	span_type = mirror->ingress ?
-			MLXSW_SP_SPAN_INGRESS : MLXSW_SP_SPAN_EGRESS;
-	mlxsw_sp_span_mirror_del(mlxsw_sp_port, mirror->span_id,
-				 span_type, true);
+	trigger = mirror->ingress ? MLXSW_SP_SPAN_TRIGGER_INGRESS :
+				    MLXSW_SP_SPAN_TRIGGER_EGRESS;
+	parms.span_id = mirror->span_id;
+	mlxsw_sp_span_agent_unbind(mlxsw_sp, trigger, mlxsw_sp_port, &parms);
+	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, !mirror->ingress);
+	mlxsw_sp_span_agent_put(mlxsw_sp, mirror->span_id);
 }
 
 static int
