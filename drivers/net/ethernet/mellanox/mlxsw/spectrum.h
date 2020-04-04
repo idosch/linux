@@ -1050,6 +1050,16 @@ struct mlxsw_sp_span_bind_parms {
 	int span_id;
 };
 
+int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp);
+void mlxsw_sp_span_fini(struct mlxsw_sp *mlxsw_sp);
+void mlxsw_sp_span_respin(struct mlxsw_sp *mlxsw_sp);
+struct mlxsw_sp_span_entry *
+mlxsw_sp_span_entry_find_by_port(struct mlxsw_sp *mlxsw_sp,
+				 const struct net_device *to_dev);
+void mlxsw_sp_span_entry_invalidate(struct mlxsw_sp *mlxsw_sp,
+				    struct mlxsw_sp_span_entry *span_entry);
+int mlxsw_sp_span_port_mtu_update(struct mlxsw_sp_port *port, u16 mtu);
+void mlxsw_sp_span_speed_update_work(struct work_struct *work);
 int mlxsw_sp_span_agent_get(struct mlxsw_sp *mlxsw_sp,
 			    const struct net_device *to_dev, int *p_span_id);
 void mlxsw_sp_span_agent_put(struct mlxsw_sp *mlxsw_sp, int span_id);

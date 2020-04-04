@@ -41,7 +41,6 @@
 #include "spectrum_cnt.h"
 #include "spectrum_dpipe.h"
 #include "spectrum_acl_flex_actions.h"
-#include "spectrum_span.h"
 #include "spectrum_ptp.h"
 #include "spectrum_trap.h"
 #include "../mlxfw/mlxfw.h"

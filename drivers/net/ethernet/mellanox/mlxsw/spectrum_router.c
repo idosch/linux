@@ -42,7 +42,6 @@
 #include "spectrum_mr.h"
 #include "spectrum_mr_tcam.h"
 #include "spectrum_router.h"
-#include "spectrum_span.h"
 
 struct mlxsw_sp_fib;
 struct mlxsw_sp_vr;
