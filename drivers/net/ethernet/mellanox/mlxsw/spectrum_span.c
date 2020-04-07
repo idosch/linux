@@ -109,7 +109,8 @@ void mlxsw_sp_span_fini(struct mlxsw_sp *mlxsw_sp)
 }
 
 static int
-mlxsw_sp_span_entry_phys_parms(const struct net_device *to_dev,
+mlxsw_sp_span_entry_phys_parms(struct mlxsw_sp *mlxsw_sp,
+			       const struct net_device *to_dev,
 			       struct mlxsw_sp_span_parms *sparmsp)
 {
 	sparmsp->dest_port = netdev_priv(to_dev);
@@ -385,7 +386,8 @@ out:
 }
 
 static int
-mlxsw_sp_span_entry_gretap4_parms(const struct net_device *to_dev,
+mlxsw_sp_span_entry_gretap4_parms(struct mlxsw_sp *mlxsw_sp,
+				  const struct net_device *to_dev,
 				  struct mlxsw_sp_span_parms *sparmsp)
 {
 	struct ip_tunnel_parm tparm = mlxsw_sp_ipip_netdev_parms4(to_dev);
@@ -486,7 +488,8 @@ out:
 }
 
 static int
-mlxsw_sp_span_entry_gretap6_parms(const struct net_device *to_dev,
+mlxsw_sp_span_entry_gretap6_parms(struct mlxsw_sp *mlxsw_sp,
+				  const struct net_device *to_dev,
 				  struct mlxsw_sp_span_parms *sparmsp)
 {
 	struct __ip6_tnl_parm tparm = mlxsw_sp_ipip_netdev_parms6(to_dev);
@@ -560,7 +563,8 @@ mlxsw_sp_span_vlan_can_handle(const struct net_device *dev)
 }
 
 static int
-mlxsw_sp_span_entry_vlan_parms(const struct net_device *to_dev,
+mlxsw_sp_span_entry_vlan_parms(struct mlxsw_sp *mlxsw_sp,
+			       const struct net_device *to_dev,
 			       struct mlxsw_sp_span_parms *sparmsp)
 {
 	struct net_device *real_dev;
@@ -632,7 +636,8 @@ struct mlxsw_sp_span_entry_ops *mlxsw_sp2_span_entry_ops_arr[] = {
 };
 
 static int
-mlxsw_sp_span_entry_nop_parms(const struct net_device *to_dev,
+mlxsw_sp_span_entry_nop_parms(struct mlxsw_sp *mlxsw_sp,
+			      const struct net_device *to_dev,
 			      struct mlxsw_sp_span_parms *sparmsp)
 {
 	return mlxsw_sp_span_entry_unoffloadable(sparmsp);
@@ -914,7 +919,7 @@ static void mlxsw_sp_span_respin_work(struct work_struct *work)
 		if (!refcount_read(&curr->ref_count))
 			continue;
 
-		err = curr->ops->parms_set(curr->to_dev, &sparms);
+		err = curr->ops->parms_set(mlxsw_sp, curr->to_dev, &sparms);
 		if (err)
 			continue;
 
@@ -950,7 +955,7 @@ int mlxsw_sp_span_agent_get(struct mlxsw_sp *mlxsw_sp,
 	}
 
 	memset(&sparms, 0, sizeof(sparms));
-	err = ops->parms_set(to_dev, &sparms);
+	err = ops->parms_set(mlxsw_sp, to_dev, &sparms);
 	if (err)
 		return err;
 
