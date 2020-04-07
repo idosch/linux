@@ -21,6 +21,8 @@
 struct mlxsw_sp_span {
 	struct work_struct work;
 	struct mlxsw_sp *mlxsw_sp;
+	const struct mlxsw_sp_span_entry_ops **span_entry_ops_arr;
+	size_t span_entry_ops_arr_size;
 	struct list_head analyzed_ports_list;
 	struct mutex analyzed_ports_lock; /* Protects analyzed_ports_list */
 	struct list_head trigger_entries_list;
@@ -57,7 +59,7 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
 	struct mlxsw_sp_span *span;
-	int i, entries_count;
+	int i, entries_count, err;
 
 	if (!MLXSW_CORE_RES_VALID(mlxsw_sp->core, MAX_SPAN))
 		return -EIO;
@@ -77,11 +79,20 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 	for (i = 0; i < mlxsw_sp->span->entries_count; i++)
 		mlxsw_sp->span->entries[i].id = i;
 
+	err = mlxsw_sp->span_ops->init(mlxsw_sp);
+	if (err)
+		goto err_init;
+
 	devlink_resource_occ_get_register(devlink, MLXSW_SP_RESOURCE_SPAN,
 					  mlxsw_sp_span_occ_get, mlxsw_sp);
 	INIT_WORK(&span->work, mlxsw_sp_span_respin_work);
 
 	return 0;
+
+err_init:
+	mutex_destroy(&mlxsw_sp->span->analyzed_ports_lock);
+	kfree(mlxsw_sp->span);
+	return err;
 }
 
 void mlxsw_sp_span_fini(struct mlxsw_sp *mlxsw_sp)
@@ -597,7 +608,19 @@ struct mlxsw_sp_span_entry_ops mlxsw_sp_span_entry_ops_vlan = {
 };
 
 static const
-struct mlxsw_sp_span_entry_ops *const mlxsw_sp_span_entry_types[] = {
+struct mlxsw_sp_span_entry_ops *mlxsw_sp1_span_entry_ops_arr[] = {
+	&mlxsw_sp_span_entry_ops_phys,
+#if IS_ENABLED(CONFIG_NET_IPGRE)
+	&mlxsw_sp_span_entry_ops_gretap4,
+#endif
+#if IS_ENABLED(CONFIG_IPV6_GRE)
+	&mlxsw_sp_span_entry_ops_gretap6,
+#endif
+	&mlxsw_sp_span_entry_ops_vlan,
+};
+
+static const
+struct mlxsw_sp_span_entry_ops *mlxsw_sp2_span_entry_ops_arr[] = {
 	&mlxsw_sp_span_entry_ops_phys,
 #if IS_ENABLED(CONFIG_NET_IPGRE)
 	&mlxsw_sp_span_entry_ops_gretap4,
@@ -864,11 +887,12 @@ static const struct mlxsw_sp_span_entry_ops *
 mlxsw_sp_span_entry_ops(struct mlxsw_sp *mlxsw_sp,
 			const struct net_device *to_dev)
 {
+	struct mlxsw_sp_span *span = mlxsw_sp->span;
 	size_t i;
 
-	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_span_entry_types); ++i)
-		if (mlxsw_sp_span_entry_types[i]->can_handle(to_dev))
-			return mlxsw_sp_span_entry_types[i];
+	for (i = 0; i < span->span_entry_ops_arr_size; ++i)
+		if (span->span_entry_ops_arr[i]->can_handle(to_dev))
+			return span->span_entry_ops_arr[i];
 
 	return NULL;
 }
@@ -1215,14 +1239,35 @@ void mlxsw_sp_span_agent_unbind(struct mlxsw_sp *mlxsw_sp,
 	mlxsw_sp_span_trigger_entry_destroy(mlxsw_sp->span, trigger_entry);
 }
 
+static int mlxsw_sp1_span_init(struct mlxsw_sp *mlxsw_sp)
+{
+	size_t arr_size = ARRAY_SIZE(mlxsw_sp1_span_entry_ops_arr);
+
+	mlxsw_sp->span->span_entry_ops_arr = mlxsw_sp1_span_entry_ops_arr;
+	mlxsw_sp->span->span_entry_ops_arr_size = arr_size;
+
+	return 0;
+}
+
 static u32 mlxsw_sp1_span_buffsize_get(int mtu, u32 speed)
 {
 	return mtu * 5 / 2;
 }
 
 const struct mlxsw_sp_span_ops mlxsw_sp1_span_ops = {
+	.init = mlxsw_sp1_span_init,
 	.buffsize_get = mlxsw_sp1_span_buffsize_get,
 };
+
+static int mlxsw_sp2_span_init(struct mlxsw_sp *mlxsw_sp)
+{
+	size_t arr_size = ARRAY_SIZE(mlxsw_sp2_span_entry_ops_arr);
+
+	mlxsw_sp->span->span_entry_ops_arr = mlxsw_sp2_span_entry_ops_arr;
+	mlxsw_sp->span->span_entry_ops_arr_size = arr_size;
+
+	return 0;
+}
 
 #define MLXSW_SP2_SPAN_EG_MIRROR_BUFFER_FACTOR 38
 #define MLXSW_SP3_SPAN_EG_MIRROR_BUFFER_FACTOR 50
@@ -1240,6 +1285,7 @@ static u32 mlxsw_sp2_span_buffsize_get(int mtu, u32 speed)
 }
 
 const struct mlxsw_sp_span_ops mlxsw_sp2_span_ops = {
+	.init = mlxsw_sp2_span_init,
 	.buffsize_get = mlxsw_sp2_span_buffsize_get,
 };
 
@@ -1251,5 +1297,6 @@ static u32 mlxsw_sp3_span_buffsize_get(int mtu, u32 speed)
 }
 
 const struct mlxsw_sp_span_ops mlxsw_sp3_span_ops = {
+	.init = mlxsw_sp2_span_init,
 	.buffsize_get = mlxsw_sp3_span_buffsize_get,
 };
