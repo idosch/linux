@@ -51,6 +51,7 @@ struct mlxsw_sp_span_trigger_entry {
 
 enum mlxsw_sp_span_trigger_type {
 	MLXSW_SP_SPAN_TRIGGER_TYPE_PORT,
+	MLXSW_SP_SPAN_TRIGGER_TYPE_GLOBAL,
 };
 
 struct mlxsw_sp_span_trigger_ops {
@@ -1228,9 +1229,100 @@ mlxsw_sp_span_trigger_port_ops = {
 	.match = mlxsw_sp_span_trigger_port_match,
 };
 
+static int
+mlxsw_sp1_span_trigger_global_bind(struct mlxsw_sp_span_trigger_entry *
+				   trigger_entry)
+{
+	return -EOPNOTSUPP;
+}
+
+static void
+mlxsw_sp1_span_trigger_global_unbind(struct mlxsw_sp_span_trigger_entry *
+				     trigger_entry)
+{
+}
+
+static bool
+mlxsw_sp1_span_trigger_global_match(struct mlxsw_sp_span_trigger_entry *
+				    trigger_entry,
+				    enum mlxsw_sp_span_trigger trigger,
+				    struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	WARN_ON_ONCE(1);
+	return false;
+}
+
+static const struct mlxsw_sp_span_trigger_ops
+mlxsw_sp1_span_trigger_global_ops = {
+	.bind = mlxsw_sp1_span_trigger_global_bind,
+	.unbind = mlxsw_sp1_span_trigger_global_unbind,
+	.match = mlxsw_sp1_span_trigger_global_match,
+};
+
 static const struct mlxsw_sp_span_trigger_ops *
-mlxsw_sp_span_trigger_ops_arr[] = {
+mlxsw_sp1_span_trigger_ops_arr[] = {
 	[MLXSW_SP_SPAN_TRIGGER_TYPE_PORT] = &mlxsw_sp_span_trigger_port_ops,
+	[MLXSW_SP_SPAN_TRIGGER_TYPE_GLOBAL] =
+		&mlxsw_sp1_span_trigger_global_ops,
+};
+
+static int
+mlxsw_sp2_span_trigger_global_bind(struct mlxsw_sp_span_trigger_entry *
+				   trigger_entry)
+{
+	struct mlxsw_sp *mlxsw_sp = trigger_entry->span->mlxsw_sp;
+	enum mlxsw_reg_mpagr_trigger trigger;
+	char mpagr_pl[MLXSW_REG_MPAGR_LEN];
+
+	switch (trigger_entry->trigger) {
+	case MLXSW_SP_SPAN_TRIGGER_TAIL_DROP:
+		trigger = MLXSW_REG_MPAGR_TRIGGER_INGRESS_SHARED_BUFFER;
+		break;
+	case MLXSW_SP_SPAN_TRIGGER_EARLY_DROP:
+		trigger = MLXSW_REG_MPAGR_TRIGGER_INGRESS_WRED;
+		break;
+	case MLXSW_SP_SPAN_TRIGGER_ECN:
+		trigger = MLXSW_REG_MPAGR_TRIGGER_EGRESS_ECN;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	mlxsw_reg_mpagr_pack(mpagr_pl, trigger, trigger_entry->parms.span_id,
+			     1);
+	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(mpagr), mpagr_pl);
+}
+
+static void
+mlxsw_sp2_span_trigger_global_unbind(struct mlxsw_sp_span_trigger_entry *
+				     trigger_entry)
+{
+	/* There is no unbinding for global triggers. The trigger should be
+	 * disabled on all ports by now.
+	 */
+}
+
+static bool
+mlxsw_sp2_span_trigger_global_match(struct mlxsw_sp_span_trigger_entry *
+				    trigger_entry,
+				    enum mlxsw_sp_span_trigger trigger,
+				    struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	return trigger_entry->trigger == trigger;
+}
+
+static const struct mlxsw_sp_span_trigger_ops
+mlxsw_sp2_span_trigger_global_ops = {
+	.bind = mlxsw_sp2_span_trigger_global_bind,
+	.unbind = mlxsw_sp2_span_trigger_global_unbind,
+	.match = mlxsw_sp2_span_trigger_global_match,
+};
+
+static const struct mlxsw_sp_span_trigger_ops *
+mlxsw_sp2_span_trigger_ops_arr[] = {
+	[MLXSW_SP_SPAN_TRIGGER_TYPE_PORT] = &mlxsw_sp_span_trigger_port_ops,
+	[MLXSW_SP_SPAN_TRIGGER_TYPE_GLOBAL] =
+		&mlxsw_sp2_span_trigger_global_ops,
 };
 
 static void
@@ -1243,6 +1335,11 @@ mlxsw_sp_span_trigger_ops_set(struct mlxsw_sp_span_trigger_entry *trigger_entry)
 	case MLXSW_SP_SPAN_TRIGGER_INGRESS: /* fall-through */
 	case MLXSW_SP_SPAN_TRIGGER_EGRESS:
 		type = MLXSW_SP_SPAN_TRIGGER_TYPE_PORT;
+		break;
+	case MLXSW_SP_SPAN_TRIGGER_TAIL_DROP: /* fall-through */
+	case MLXSW_SP_SPAN_TRIGGER_EARLY_DROP: /* fall-through */
+	case MLXSW_SP_SPAN_TRIGGER_ECN:
+		type = MLXSW_SP_SPAN_TRIGGER_TYPE_GLOBAL;
 		break;
 	default:
 		WARN_ON_ONCE(1);
@@ -1382,7 +1479,7 @@ static int mlxsw_sp1_span_init(struct mlxsw_sp *mlxsw_sp)
 		    &mlxsw_sp1_span_entry_ops_cpu))
 		return -EINVAL;
 
-	mlxsw_sp->span->span_trigger_ops_arr = mlxsw_sp_span_trigger_ops_arr;
+	mlxsw_sp->span->span_trigger_ops_arr = mlxsw_sp1_span_trigger_ops_arr;
 	mlxsw_sp->span->span_entry_ops_arr = mlxsw_sp1_span_entry_ops_arr;
 	mlxsw_sp->span->span_entry_ops_arr_size = arr_size;
 
@@ -1410,7 +1507,7 @@ static int mlxsw_sp2_span_init(struct mlxsw_sp *mlxsw_sp)
 		    &mlxsw_sp2_span_entry_ops_cpu))
 		return -EINVAL;
 
-	mlxsw_sp->span->span_trigger_ops_arr = mlxsw_sp_span_trigger_ops_arr;
+	mlxsw_sp->span->span_trigger_ops_arr = mlxsw_sp2_span_trigger_ops_arr;
 	mlxsw_sp->span->span_entry_ops_arr = mlxsw_sp2_span_entry_ops_arr;
 	mlxsw_sp->span->span_entry_ops_arr_size = arr_size;
 
