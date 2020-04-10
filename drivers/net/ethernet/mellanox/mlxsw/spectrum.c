@@ -1377,7 +1377,7 @@ mlxsw_sp_port_add_cls_matchall_mirror(struct mlxsw_sp_port *mlxsw_sp_port,
 				      bool ingress)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
-	struct mlxsw_sp_span_agent_parms agent_parms;
+	struct mlxsw_sp_span_agent_parms agent_parms = {};
 	struct mlxsw_sp_span_trigger_parms parms;
 	enum mlxsw_sp_span_trigger trigger;
 	int span_id;
