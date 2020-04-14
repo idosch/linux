@@ -29,4 +29,12 @@ struct mlxsw_sp_trap_group_item {
 	u8 valid:1;
 };
 
+#define MLXSW_SP_LISTENERS_MAX 3
+
+struct mlxsw_sp_trap_item {
+	struct devlink_trap trap;
+	struct mlxsw_listener listeners_arr[MLXSW_SP_LISTENERS_MAX];
+	size_t listeners_count;
+};
+
 #endif
