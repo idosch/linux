@@ -21,4 +21,12 @@ struct mlxsw_sp_trap_policer_item {
 	struct list_head list; /* Member of policer_item_list */
 };
 
+struct mlxsw_sp_trap_group_item {
+	struct devlink_trap_group trap_group;
+	u16 hw_group_id;
+	u8 priority;
+	u8 tc;
+	u8 valid:1;
+};
+
 #endif
