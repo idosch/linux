@@ -8,6 +8,7 @@
 #include <net/devlink.h>
 
 struct mlxsw_sp_trap {
+	struct mlxsw_sp_trap_group_item *group_items_arr;
 	struct devlink_trap_policer *policers_arr; /* Registered policers */
 	u64 policers_count; /* Number of registered policers */
 	struct list_head policer_item_list;

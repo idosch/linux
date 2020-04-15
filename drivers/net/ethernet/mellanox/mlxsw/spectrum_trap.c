@@ -571,16 +571,23 @@ static void mlxsw_sp_trap_policers_fini(struct mlxsw_sp *mlxsw_sp)
 
 static int mlxsw_sp_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
 {
+	struct mlxsw_sp_trap_group_item *group_item, *group_items_arr;
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
-	const struct mlxsw_sp_trap_group_item *group_item;
 	int err, i;
+
+	group_items_arr = kmemdup(mlxsw_sp_trap_group_items_arr,
+				  sizeof(mlxsw_sp_trap_group_items_arr),
+				  GFP_KERNEL);
+	if (!group_items_arr)
+		return -ENOMEM;
+	mlxsw_sp->trap->group_items_arr = group_items_arr;
 
 	err = mlxsw_sp->trap_ops->groups_init(mlxsw_sp);
 	if (err)
-		return err;
+		goto err_groups_init;
 
 	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_trap_group_items_arr); i++) {
-		group_item = &mlxsw_sp_trap_group_items_arr[i];
+		group_item = &mlxsw_sp->trap->group_items_arr[i];
 		if (!group_item->valid)
 			continue;
 		err = devlink_trap_groups_register(devlink,
@@ -593,12 +600,14 @@ static int mlxsw_sp_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
 
 err_trap_group_register:
 	for (i--; i >= 0; i--) {
-		group_item = &mlxsw_sp_trap_group_items_arr[i];
+		group_item = &mlxsw_sp->trap->group_items_arr[i];
 		if (!group_item->valid)
 			continue;
 		devlink_trap_groups_unregister(devlink, &group_item->trap_group,
 					       1);
 	}
+err_groups_init:
+	kfree(mlxsw_sp->trap->group_items_arr);
 	return err;
 }
 
@@ -608,14 +617,15 @@ static void mlxsw_sp_trap_groups_fini(struct mlxsw_sp *mlxsw_sp)
 	int i;
 
 	for (i = ARRAY_SIZE(mlxsw_sp_trap_group_items_arr) - 1; i >= 0; i--) {
-		const struct mlxsw_sp_trap_group_item *group_item;
+		struct mlxsw_sp_trap_group_item *group_item;
 
-		group_item = &mlxsw_sp_trap_group_items_arr[i];
+		group_item = &mlxsw_sp->trap->group_items_arr[i];
 		if (!group_item->valid)
 			continue;
 		devlink_trap_groups_unregister(devlink, &group_item->trap_group,
 					       1);
 	}
+	kfree(mlxsw_sp->trap->group_items_arr);
 }
 
 static int mlxsw_sp_traps_init(struct mlxsw_sp *mlxsw_sp)
@@ -784,10 +794,10 @@ __mlxsw_sp_trap_group_init(struct mlxsw_core *mlxsw_core,
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
 	u16 hw_policer_id = MLXSW_REG_HTGT_INVALID_POLICER;
-	const struct mlxsw_sp_trap_group_item *group_item;
+	struct mlxsw_sp_trap_group_item *group_item;
 	char htgt_pl[MLXSW_REG_HTGT_LEN];
 
-	group_item = &mlxsw_sp_trap_group_items_arr[group->id];
+	group_item = &mlxsw_sp->trap->group_items_arr[group->id];
 
 	if (policer_id) {
 		struct mlxsw_sp_trap_policer_item *policer_item;
