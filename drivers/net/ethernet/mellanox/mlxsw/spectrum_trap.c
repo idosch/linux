@@ -31,6 +31,15 @@ enum {
 
 #define MLXSW_SP_TRAP_METADATA DEVLINK_TRAP_METADATA_TYPE_F_IN_PORT
 
+enum {
+	/* Packet was tail dropped. */
+	MLXSW_SP_MIRROR_REASON_INGRESS_SHARED_BUFFER = 8,
+	/* Packet was early dropped. */
+	MLXSW_SP_MIRROR_REASON_INGRESS_WRED = 9,
+	/* Packet was ECN marked. */
+	MLXSW_SP_MIRROR_REASON_EGRESS_ECN = 13,
+};
+
 static int mlxsw_sp_rx_listener(struct mlxsw_sp *mlxsw_sp, struct sk_buff *skb,
 				u8 local_port,
 				struct mlxsw_sp_port *mlxsw_sp_port)
@@ -146,6 +155,11 @@ static void mlxsw_sp_rx_exception_listener(struct sk_buff *skb, u8 local_port,
 			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
 			     MLXSW_SP_TRAP_METADATA | (_metadata))
 
+#define MLXSW_SP_TRAP_BUFFER_DROP(_id)					      \
+	DEVLINK_TRAP_GENERIC(DROP, TRAP, _id,				      \
+			     DEVLINK_TRAP_GROUP_GENERIC_ID_BUFFER_DROPS,      \
+			     MLXSW_SP_TRAP_METADATA)
+
 #define MLXSW_SP_TRAP_DRIVER_DROP(_id, _group_id)			      \
 	DEVLINK_TRAP_DRIVER(DROP, DROP, DEVLINK_MLXSW_TRAP_ID_##_id,	      \
 			    DEVLINK_MLXSW_TRAP_NAME_##_id,		      \
@@ -167,6 +181,10 @@ static void mlxsw_sp_rx_exception_listener(struct sk_buff *skb, u8 local_port,
 		      TRAP_EXCEPTION_TO_CPU, false, SP_##_en_group_id,	      \
 		      SET_FW_DEFAULT, SP_##_dis_group_id)
 
+#define MLXSW_SP_RXL_BUFFER_DISCARD(_mirror_reason)			      \
+	MLXSW_RXL_MIRROR(mlxsw_sp_rx_drop_listener, 0, SP_BUFFER_DISCARDS,    \
+			 MLXSW_SP_MIRROR_REASON_##_mirror_reason)
+
 #define MLXSW_SP_RXL_EXCEPTION(_id, _group_id, _action)			      \
 	MLXSW_RXL(mlxsw_sp_rx_exception_listener, _id,			      \
 		   _action, false, SP_##_group_id, SET_FW_DEFAULT)
@@ -181,6 +199,7 @@ static void mlxsw_sp_rx_exception_listener(struct sk_buff *skb, u8 local_port,
 /* Ordered by policer identifier */
 static const struct devlink_trap_policer mlxsw_sp_trap_policers_arr[] = {
 	MLXSW_SP_TRAP_POLICER(1, 10 * 1024, 128),
+	MLXSW_SP_TRAP_POLICER(2, 10 * 1024, 128),
 };
 
 static const struct mlxsw_sp_trap_group_item
@@ -773,6 +792,10 @@ int mlxsw_sp_trap_action_set(struct mlxsw_core *mlxsw_core,
 	int i;
 
 	trap_item = &mlxsw_sp->trap->trap_items_arr[trap->id];
+	if (trap_item->is_source) {
+		NL_SET_ERR_MSG_MOD(extack, "Changing the action of source traps is not supported");
+		return -EOPNOTSUPP;
+	}
 
 	for (i = 0; i < trap_item->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
@@ -810,6 +833,11 @@ __mlxsw_sp_trap_group_init(struct mlxsw_core *mlxsw_core,
 	char htgt_pl[MLXSW_REG_HTGT_LEN];
 
 	group_item = &mlxsw_sp->trap->group_items_arr[group->id];
+
+	if (group_item->fixed_policer && policer_id != group->init_policer_id) {
+		NL_SET_ERR_MSG_MOD(extack, "Changing the policer binding of this group is not supported");
+		return -EOPNOTSUPP;
+	}
 
 	if (policer_id) {
 		struct mlxsw_sp_trap_policer_item *policer_item;
@@ -1006,13 +1034,78 @@ const struct mlxsw_sp_trap_ops mlxsw_sp1_trap_ops = {
 	.traps_init = mlxsw_sp1_traps_init,
 };
 
+static const struct mlxsw_sp_trap_group_item
+mlxsw_sp2_trap_group_items_arr[] = {
+	[DEVLINK_TRAP_GROUP_GENERIC_ID_BUFFER_DROPS] = {
+		.trap_group = DEVLINK_TRAP_GROUP_GENERIC(BUFFER_DROPS, 2),
+		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_BUFFER_DISCARDS,
+		.priority = 0,
+		.tc = 1,
+		.valid = true,
+		.fixed_policer = true,
+	},
+};
+
+static const struct mlxsw_sp_trap_item mlxsw_sp2_trap_items_arr[] = {
+	[DEVLINK_TRAP_GENERIC_ID_TAIL_DROP] = {
+		.trap = MLXSW_SP_TRAP_BUFFER_DROP(TAIL_DROP),
+		.listeners_arr = {
+			MLXSW_SP_RXL_BUFFER_DISCARD(INGRESS_SHARED_BUFFER),
+		},
+		.listeners_count = 1,
+		.is_source = true,
+	},
+	[DEVLINK_TRAP_GENERIC_ID_EARLY_DROP] = {
+		.trap = MLXSW_SP_TRAP_BUFFER_DROP(EARLY_DROP),
+		.listeners_arr = {
+			MLXSW_SP_RXL_BUFFER_DISCARD(INGRESS_WRED),
+		},
+		.listeners_count = 1,
+		.is_source = true,
+	},
+	[DEVLINK_TRAP_GENERIC_ID_ECN_MARK] = {
+		.trap = MLXSW_SP_TRAP_BUFFER_DROP(ECN_MARK),
+		.listeners_arr = {
+			MLXSW_SP_RXL_BUFFER_DISCARD(EGRESS_ECN),
+		},
+		.listeners_count = 1,
+		.is_source = true,
+	},
+};
+
 static int mlxsw_sp2_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
 {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mlxsw_sp2_trap_group_items_arr); i++) {
+		const struct mlxsw_sp_trap_group_item *group_item;
+		u16 id;
+
+		group_item = &mlxsw_sp2_trap_group_items_arr[i];
+		if (!group_item->valid)
+			continue;
+		id = group_item->trap_group.id;
+		mlxsw_sp->trap->group_items_arr[id] = *group_item;
+	}
+
 	return 0;
 }
 
 static int mlxsw_sp2_traps_init(struct mlxsw_sp *mlxsw_sp)
 {
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mlxsw_sp2_trap_items_arr); i++) {
+		const struct mlxsw_sp_trap_item *trap_item;
+		u16 id;
+
+		trap_item = &mlxsw_sp2_trap_items_arr[i];
+		if (trap_item->listeners_count == 0)
+			continue;
+		id = trap_item->trap.id;
+		mlxsw_sp->trap->trap_items_arr[id] = *trap_item;
+	}
+
 	return 0;
 }
 

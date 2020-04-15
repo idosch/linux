@@ -28,7 +28,8 @@ struct mlxsw_sp_trap_group_item {
 	u16 hw_group_id;
 	u8 priority;
 	u8 tc;
-	u8 valid:1;
+	u8 valid:1,
+	   fixed_policer:1; /* Whether policer binding can change */
 };
 
 #define MLXSW_SP_LISTENERS_MAX 3
@@ -37,6 +38,7 @@ struct mlxsw_sp_trap_item {
 	struct devlink_trap trap;
 	struct mlxsw_listener listeners_arr[MLXSW_SP_LISTENERS_MAX];
 	size_t listeners_count;
+	u8 is_source:1;
 };
 
 struct mlxsw_sp_trap_ops {
