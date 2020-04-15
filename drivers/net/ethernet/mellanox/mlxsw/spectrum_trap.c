@@ -631,15 +631,21 @@ static void mlxsw_sp_trap_groups_fini(struct mlxsw_sp *mlxsw_sp)
 static int mlxsw_sp_traps_init(struct mlxsw_sp *mlxsw_sp)
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
-	const struct mlxsw_sp_trap_item *trap_item;
+	struct mlxsw_sp_trap_item *trap_item, *trap_items_arr;
 	int err, i;
+
+	trap_items_arr = kmemdup(mlxsw_sp_trap_items_arr,
+				 sizeof(mlxsw_sp_trap_items_arr), GFP_KERNEL);
+	if (!trap_items_arr)
+		return -ENOMEM;
+	mlxsw_sp->trap->trap_items_arr = trap_items_arr;
 
 	err = mlxsw_sp->trap_ops->traps_init(mlxsw_sp);
 	if (err)
-		return err;
+		goto err_traps_init;
 
 	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_trap_items_arr); i++) {
-		trap_item = &mlxsw_sp_trap_items_arr[i];
+		trap_item = &mlxsw_sp->trap->trap_items_arr[i];
 		if (trap_item->listeners_count == 0)
 			continue;
 		err = devlink_traps_register(devlink, &trap_item->trap, 1,
@@ -652,11 +658,13 @@ static int mlxsw_sp_traps_init(struct mlxsw_sp *mlxsw_sp)
 
 err_trap_register:
 	for (i--; i >= 0; i--) {
-		trap_item = &mlxsw_sp_trap_items_arr[i];
+		trap_item = &mlxsw_sp->trap->trap_items_arr[i];
 		if (trap_item->listeners_count == 0)
 			continue;
 		devlink_traps_unregister(devlink, &trap_item->trap, 1);
 	}
+err_traps_init:
+	kfree(mlxsw_sp->trap->trap_items_arr);
 	return err;
 }
 
@@ -666,13 +674,14 @@ static void mlxsw_sp_traps_fini(struct mlxsw_sp *mlxsw_sp)
 	int i;
 
 	for (i = ARRAY_SIZE(mlxsw_sp_trap_items_arr) - 1; i >= 0; i--) {
-		const struct mlxsw_sp_trap_item *trap_item;
+		struct mlxsw_sp_trap_item *trap_item;
 
-		trap_item = &mlxsw_sp_trap_items_arr[i];
+		trap_item = &mlxsw_sp->trap->trap_items_arr[i];
 		if (trap_item->listeners_count == 0)
 			continue;
 		devlink_traps_unregister(devlink, &trap_item->trap, 1);
 	}
+	kfree(mlxsw_sp->trap->trap_items_arr);
 }
 
 int mlxsw_sp_devlink_traps_init(struct mlxsw_sp *mlxsw_sp)
@@ -718,10 +727,11 @@ void mlxsw_sp_devlink_traps_fini(struct mlxsw_sp *mlxsw_sp)
 int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 		       const struct devlink_trap *trap, void *trap_ctx)
 {
-	const struct mlxsw_sp_trap_item *trap_item;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_item *trap_item;
 	int i;
 
-	trap_item = &mlxsw_sp_trap_items_arr[trap->id];
+	trap_item = &mlxsw_sp->trap->trap_items_arr[trap->id];
 
 	for (i = 0; i < trap_item->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
@@ -739,10 +749,11 @@ int mlxsw_sp_trap_init(struct mlxsw_core *mlxsw_core,
 void mlxsw_sp_trap_fini(struct mlxsw_core *mlxsw_core,
 			const struct devlink_trap *trap, void *trap_ctx)
 {
-	const struct mlxsw_sp_trap_item *trap_item;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_item *trap_item;
 	int i;
 
-	trap_item = &mlxsw_sp_trap_items_arr[trap->id];
+	trap_item = &mlxsw_sp->trap->trap_items_arr[trap->id];
 
 	for (i = trap_item->listeners_count - 1; i >= 0; i--) {
 		const struct mlxsw_listener *listener;
@@ -757,10 +768,11 @@ int mlxsw_sp_trap_action_set(struct mlxsw_core *mlxsw_core,
 			     enum devlink_trap_action action,
 			     struct netlink_ext_ack *extack)
 {
-	const struct mlxsw_sp_trap_item *trap_item;
+	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+	struct mlxsw_sp_trap_item *trap_item;
 	int i;
 
-	trap_item = &mlxsw_sp_trap_items_arr[trap->id];
+	trap_item = &mlxsw_sp->trap->trap_items_arr[trap->id];
 
 	for (i = 0; i < trap_item->listeners_count; i++) {
 		const struct mlxsw_listener *listener;
