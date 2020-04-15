@@ -37,4 +37,12 @@ struct mlxsw_sp_trap_item {
 	size_t listeners_count;
 };
 
+struct mlxsw_sp_trap_ops {
+	int (*groups_init)(struct mlxsw_sp *mlxsw_sp);
+	int (*traps_init)(struct mlxsw_sp *mlxsw_sp);
+};
+
+extern const struct mlxsw_sp_trap_ops mlxsw_sp1_trap_ops;
+extern const struct mlxsw_sp_trap_ops mlxsw_sp2_trap_ops;
+
 #endif

@@ -575,6 +575,10 @@ static int mlxsw_sp_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
 	const struct mlxsw_sp_trap_group_item *group_item;
 	int err, i;
 
+	err = mlxsw_sp->trap_ops->groups_init(mlxsw_sp);
+	if (err)
+		return err;
+
 	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_trap_group_items_arr); i++) {
 		group_item = &mlxsw_sp_trap_group_items_arr[i];
 		if (!group_item->valid)
@@ -619,6 +623,10 @@ static int mlxsw_sp_traps_init(struct mlxsw_sp *mlxsw_sp)
 	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
 	const struct mlxsw_sp_trap_item *trap_item;
 	int err, i;
+
+	err = mlxsw_sp->trap_ops->traps_init(mlxsw_sp);
+	if (err)
+		return err;
 
 	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_trap_items_arr); i++) {
 		trap_item = &mlxsw_sp_trap_items_arr[i];
@@ -960,3 +968,33 @@ mlxsw_sp_trap_policer_counter_get(struct mlxsw_core *mlxsw_core,
 
 	return 0;
 }
+
+static int mlxsw_sp1_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
+{
+	return 0;
+}
+
+static int mlxsw_sp1_traps_init(struct mlxsw_sp *mlxsw_sp)
+{
+	return 0;
+}
+
+const struct mlxsw_sp_trap_ops mlxsw_sp1_trap_ops = {
+	.groups_init = mlxsw_sp1_trap_groups_init,
+	.traps_init = mlxsw_sp1_traps_init,
+};
+
+static int mlxsw_sp2_trap_groups_init(struct mlxsw_sp *mlxsw_sp)
+{
+	return 0;
+}
+
+static int mlxsw_sp2_traps_init(struct mlxsw_sp *mlxsw_sp)
+{
+	return 0;
+}
+
+const struct mlxsw_sp_trap_ops mlxsw_sp2_trap_ops = {
+	.groups_init = mlxsw_sp2_trap_groups_init,
+	.traps_init = mlxsw_sp2_traps_init,
+};
