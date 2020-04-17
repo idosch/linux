@@ -431,6 +431,10 @@ enum {
 	DEVLINK_TRAP_GENERIC(EXCEPTION, TRAP, _id,			      \
 			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
 			     NSIM_TRAP_METADATA)
+#define NSIM_TRAP_CONTROL(_id, _group_id, _action)			      \
+	DEVLINK_TRAP_GENERIC(CONTROL, _action, _id,			      \
+			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
+			     NSIM_TRAP_METADATA)
 #define NSIM_TRAP_DRIVER_EXCEPTION(_id, _group_id)			      \
 	DEVLINK_TRAP_DRIVER(EXCEPTION, TRAP, NSIM_TRAP_ID_##_id,	      \
 			    NSIM_TRAP_NAME_##_id,			      \
@@ -460,6 +464,7 @@ static const struct devlink_trap_group nsim_trap_groups_arr[] = {
 	DEVLINK_TRAP_GROUP_GENERIC(L3_DROPS, 1),
 	DEVLINK_TRAP_GROUP_GENERIC(BUFFER_DROPS, 2),
 	DEVLINK_TRAP_GROUP_GENERIC(ACL_DROPS, 3),
+	DEVLINK_TRAP_GROUP_GENERIC(ARP, 3),
 };
 
 static const struct devlink_trap nsim_traps_arr[] = {
@@ -477,6 +482,8 @@ static const struct devlink_trap nsim_traps_arr[] = {
 			   DEVLINK_TRAP_METADATA_TYPE_F_FA_COOKIE),
 	NSIM_TRAP_DROP_EXT(EGRESS_FLOW_ACTION_DROP, ACL_DROPS,
 			   DEVLINK_TRAP_METADATA_TYPE_F_FA_COOKIE),
+	NSIM_TRAP_CONTROL(ARP_REQUEST, ARP, MIRROR),
+	NSIM_TRAP_CONTROL(ARP_RESPONSE, ARP, TRAP),
 };
 
 #define NSIM_TRAP_L4_DATA_LEN 100
