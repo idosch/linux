@@ -8451,6 +8451,9 @@ static const struct devlink_trap devlink_trap_generic[] = {
 	DEVLINK_TRAP(EGRESS_FLOW_ACTION_DROP, DROP),
 	DEVLINK_TRAP(EARLY_DROP, DROP),
 	DEVLINK_TRAP(ECN_MARK, DROP),
+	DEVLINK_TRAP(STP, CONTROL),
+	DEVLINK_TRAP(ARP_REQUEST, CONTROL),
+	DEVLINK_TRAP(ARP_RESPONSE, CONTROL),
 };
 
 #define DEVLINK_TRAP_GROUP(_id)						      \
@@ -8465,6 +8468,8 @@ static const struct devlink_trap_group devlink_trap_group_generic[] = {
 	DEVLINK_TRAP_GROUP(BUFFER_DROPS),
 	DEVLINK_TRAP_GROUP(TUNNEL_DROPS),
 	DEVLINK_TRAP_GROUP(ACL_DROPS),
+	DEVLINK_TRAP_GROUP(STP),
+	DEVLINK_TRAP_GROUP(ARP),
 };
 
 static int devlink_trap_generic_verify(const struct devlink_trap *trap)

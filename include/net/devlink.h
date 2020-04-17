@@ -647,6 +647,9 @@ enum devlink_trap_generic_id {
 	DEVLINK_TRAP_GENERIC_ID_EGRESS_FLOW_ACTION_DROP,
 	DEVLINK_TRAP_GENERIC_ID_EARLY_DROP,
 	DEVLINK_TRAP_GENERIC_ID_ECN_MARK,
+	DEVLINK_TRAP_GENERIC_ID_STP,
+	DEVLINK_TRAP_GENERIC_ID_ARP_REQUEST,
+	DEVLINK_TRAP_GENERIC_ID_ARP_RESPONSE,
 
 	/* Add new generic trap IDs above */
 	__DEVLINK_TRAP_GENERIC_ID_MAX,
@@ -662,6 +665,8 @@ enum devlink_trap_group_generic_id {
 	DEVLINK_TRAP_GROUP_GENERIC_ID_BUFFER_DROPS,
 	DEVLINK_TRAP_GROUP_GENERIC_ID_TUNNEL_DROPS,
 	DEVLINK_TRAP_GROUP_GENERIC_ID_ACL_DROPS,
+	DEVLINK_TRAP_GROUP_GENERIC_ID_STP,
+	DEVLINK_TRAP_GROUP_GENERIC_ID_ARP,
 
 	/* Add new generic trap group IDs above */
 	__DEVLINK_TRAP_GROUP_GENERIC_ID_MAX,
@@ -731,6 +736,12 @@ enum devlink_trap_group_generic_id {
 	"early_drop"
 #define DEVLINK_TRAP_GENERIC_NAME_ECN_MARK \
 	"ecn_mark"
+#define DEVLINK_TRAP_GENERIC_NAME_STP \
+	"stp"
+#define DEVLINK_TRAP_GENERIC_NAME_ARP_REQUEST \
+	"arp_request"
+#define DEVLINK_TRAP_GENERIC_NAME_ARP_RESPONSE \
+	"arp_response"
 
 #define DEVLINK_TRAP_GROUP_GENERIC_NAME_L2_DROPS \
 	"l2_drops"
@@ -742,6 +753,10 @@ enum devlink_trap_group_generic_id {
 	"tunnel_drops"
 #define DEVLINK_TRAP_GROUP_GENERIC_NAME_ACL_DROPS \
 	"acl_drops"
+#define DEVLINK_TRAP_GROUP_GENERIC_NAME_STP \
+	"stp"
+#define DEVLINK_TRAP_GROUP_GENERIC_NAME_ARP \
+	"arp"
 
 #define DEVLINK_TRAP_GENERIC(_type, _init_action, _id, _group_id,	      \
 			     _metadata_cap)				      \

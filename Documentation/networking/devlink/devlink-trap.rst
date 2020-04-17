@@ -260,6 +260,15 @@ be added to the following table:
      - ``drop``
      - Traps ECN-capable packets that were marked with CE (Congestion
        Encountered) code point by RED algorithm instead of being dropped
+   * - ``stp``
+     - ``control``
+     - Traps STP packets
+   * - ``arp_request``
+     - ``control``
+     - Traps ARP request packets
+   * - ``arp_response``
+     - ``control``
+     - Traps ARP response packets
 
 Driver-specific Packet Traps
 ============================
@@ -304,6 +313,10 @@ narrow. The description of these groups must be added to the following table:
    * - ``acl_drops``
      - Contains packet traps for packets that were dropped by the device during
        ACL processing
+   * - ``stp``
+     - Contains packet traps for STP packets
+   * - ``arp``
+     - Contains packet traps for ARP packets
 
 Packet Trap Policers
 ====================
