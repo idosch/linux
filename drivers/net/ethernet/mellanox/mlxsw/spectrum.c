@@ -4498,7 +4498,6 @@ static const struct mlxsw_listener mlxsw_sp_listener[] = {
 	/* Events */
 	MLXSW_SP_EVENTL(mlxsw_sp_pude_event_func, PUDE),
 	/* L2 traps */
-	MLXSW_SP_RXL_NO_MARK(STP, TRAP_TO_CPU, STP, true),
 	MLXSW_SP_RXL_NO_MARK(LACP, TRAP_TO_CPU, LACP, true),
 	MLXSW_RXL(mlxsw_sp_rx_listener_ptp, LLDP, TRAP_TO_CPU,
 		  false, SP_LLDP, DISCARD),
@@ -4603,7 +4602,6 @@ static int mlxsw_sp_cpu_policers_set(struct mlxsw_core *mlxsw_core)
 	for (i = 0; i < max_cpu_policers; i++) {
 		is_bytes = false;
 		switch (i) {
-		case MLXSW_REG_HTGT_TRAP_GROUP_SP_STP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_LACP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_LLDP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_OSPF:
@@ -4677,7 +4675,6 @@ static int mlxsw_sp_trap_groups_set(struct mlxsw_core *mlxsw_core)
 	for (i = 0; i < max_trap_groups; i++) {
 		policer_id = i;
 		switch (i) {
-		case MLXSW_REG_HTGT_TRAP_GROUP_SP_STP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_LACP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_LLDP:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_OSPF:

@@ -177,6 +177,11 @@ static void mlxsw_sp_rx_mark_listener(struct sk_buff *skb, u8 local_port,
 			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
 			     MLXSW_SP_TRAP_METADATA)
 
+#define MLXSW_SP_TRAP_CONTROL(_id, _group_id, _action)			      \
+	DEVLINK_TRAP_GENERIC(CONTROL, _action, _id,			      \
+			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
+			     MLXSW_SP_TRAP_METADATA)
+
 #define MLXSW_SP_RXL_DISCARD(_id, _group_id)				      \
 	MLXSW_RXL_DIS(mlxsw_sp_rx_drop_listener, DISCARD_##_id,		      \
 		      TRAP_EXCEPTION_TO_CPU, false, SP_##_group_id,	      \
@@ -195,6 +200,10 @@ static void mlxsw_sp_rx_mark_listener(struct sk_buff *skb, u8 local_port,
 	MLXSW_RXL(mlxsw_sp_rx_mark_listener, _id,			      \
 		   _action, false, SP_##_group_id, SET_FW_DEFAULT)
 
+#define MLXSW_SP_RXL_NO_MARK(_id, _group_id, _action, _is_ctrl)		      \
+	MLXSW_RXL(mlxsw_sp_rx_no_mark_listener, _id, _action,		      \
+		  _is_ctrl, SP_##_group_id, DISCARD)
+
 #define MLXSW_SP_TRAP_POLICER(_id, _rate, _burst)			      \
 	DEVLINK_TRAP_POLICER(_id, _rate, _burst,			      \
 			     MLXSW_REG_QPCR_HIGHEST_CIR,		      \
@@ -206,6 +215,7 @@ static void mlxsw_sp_rx_mark_listener(struct sk_buff *skb, u8 local_port,
 static const struct devlink_trap_policer mlxsw_sp_trap_policers_arr[] = {
 	MLXSW_SP_TRAP_POLICER(1, 10 * 1024, 128),
 	MLXSW_SP_TRAP_POLICER(2, 10 * 1024, 128),
+	MLXSW_SP_TRAP_POLICER(3, 128, 128),
 };
 
 static const struct mlxsw_sp_trap_group_item
@@ -236,6 +246,13 @@ mlxsw_sp_trap_group_items_arr[DEVLINK_TRAP_GROUP_GENERIC_ID_MAX + 1] = {
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_ACL_DISCARDS,
 		.priority = 0,
 		.tc = 1,
+		.valid = true,
+	},
+	[DEVLINK_TRAP_GROUP_GENERIC_ID_STP] = {
+		.trap_group = DEVLINK_TRAP_GROUP_GENERIC(STP, 3),
+		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_STP,
+		.priority = 5,
+		.tc = 5,
 		.valid = true,
 	},
 };
@@ -483,6 +500,13 @@ mlxsw_sp_trap_items_arr[DEVLINK_MLXSW_TRAP_ID_MAX + 1] = {
 		.listeners_arr = {
 			MLXSW_SP_RXL_ACL_DISCARD(EGRESS_ACL, ACL_DISCARDS,
 						 DUMMY),
+		},
+		.listeners_count = 1,
+	},
+	[DEVLINK_TRAP_GENERIC_ID_STP] = {
+		.trap = MLXSW_SP_TRAP_CONTROL(STP, STP, TRAP),
+		.listeners_arr = {
+			MLXSW_SP_RXL_NO_MARK(STP, STP, TRAP_TO_CPU, true),
 		},
 		.listeners_count = 1,
 	},
