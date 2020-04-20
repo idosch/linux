@@ -423,6 +423,32 @@ devlink_trap_drop_cleanup()
 	tc filter del dev $dev egress protocol $proto pref $pref handle $handle flower
 }
 
+devlink_trap_stats_test()
+{
+	local test_name=$1; shift
+	local trap_name=$1; shift
+	local send_one="$@"
+	local diff_packets
+	local t0_packets
+	local t1_packets
+
+	RET=0
+
+	t0_packets=$(devlink_trap_rx_packets_get $trap_name)
+
+	$send_one && sleep 1
+
+	t1_packets=$(devlink_trap_rx_packets_get $trap_name)
+
+	diff_packets=$((t1_packets - t0_packets))
+
+	if [[ $diff_packets -ne 1 ]]; then
+		check_err 1 "Trap stats increased by $diff_packets instead of 1"
+	fi
+
+	log_test "$test_name"
+}
+
 devlink_trap_policers_num_get()
 {
 	devlink -j -p trap policer show | jq '.[]["'$DEVLINK_DEV'"] | length'
