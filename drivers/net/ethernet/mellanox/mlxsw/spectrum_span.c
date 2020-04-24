@@ -766,7 +766,7 @@ static int mlxsw_sp_span_entry_put(struct mlxsw_sp *mlxsw_sp,
 }
 
 static int
-mlxsw_sp_span_port_buffsize_update(struct mlxsw_sp_port *mlxsw_sp_port, u16 mtu)
+mlxsw_sp_span_port_buffer_update(struct mlxsw_sp_port *mlxsw_sp_port, u16 mtu)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	char sbib_pl[MLXSW_REG_SBIB_LEN];
@@ -783,6 +783,15 @@ mlxsw_sp_span_port_buffsize_update(struct mlxsw_sp_port *mlxsw_sp_port, u16 mtu)
 	buffsize = mlxsw_sp_span_buffsize_get(mlxsw_sp, speed, mtu);
 	mlxsw_reg_sbib_pack(sbib_pl, mlxsw_sp_port->local_port, buffsize);
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sbib), sbib_pl);
+}
+
+static void mlxsw_sp_span_port_buffer_disable(struct mlxsw_sp *mlxsw_sp,
+					      u8 local_port)
+{
+	char sbib_pl[MLXSW_REG_SBIB_LEN];
+
+	mlxsw_reg_sbib_pack(sbib_pl, local_port, 0);
+	mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sbib), sbib_pl);
 }
 
 static struct mlxsw_sp_span_analyzed_port *
@@ -812,7 +821,7 @@ int mlxsw_sp_span_port_mtu_update(struct mlxsw_sp_port *port, u16 mtu)
 
 	if (mlxsw_sp_span_analyzed_port_find(mlxsw_sp->span, port->local_port,
 					     true))
-		err = mlxsw_sp_span_port_buffsize_update(port, mtu);
+		err = mlxsw_sp_span_port_buffer_update(port, mtu);
 
 	mutex_unlock(&mlxsw_sp->span->analyzed_ports_lock);
 
@@ -836,8 +845,8 @@ void mlxsw_sp_span_speed_update_work(struct work_struct *work)
 
 	if (mlxsw_sp_span_analyzed_port_find(mlxsw_sp->span,
 					     mlxsw_sp_port->local_port, true))
-		mlxsw_sp_span_port_buffsize_update(mlxsw_sp_port,
-						   mlxsw_sp_port->dev->mtu);
+		mlxsw_sp_span_port_buffer_update(mlxsw_sp_port,
+						 mlxsw_sp_port->dev->mtu);
 
 	mutex_unlock(&mlxsw_sp->span->analyzed_ports_lock);
 }
@@ -901,7 +910,7 @@ mlxsw_sp_span_inspected_port_add(struct mlxsw_sp_port *port,
 
 	/* if it is an egress SPAN, bind a shared buffer to it */
 	if (type == MLXSW_SP_SPAN_EGRESS) {
-		err = mlxsw_sp_span_port_buffsize_update(port, port->dev->mtu);
+		err = mlxsw_sp_span_port_buffer_update(port, port->dev->mtu);
 		if (err)
 			return err;
 	}
@@ -1133,14 +1142,14 @@ mlxsw_sp_span_analyzed_port_create(struct mlxsw_sp_span *span,
 	if (egress) {
 		u16 mtu = mlxsw_sp_port->dev->mtu;
 
-		err = mlxsw_sp_span_port_buffsize_update(mlxsw_sp_port, mtu);
+		err = mlxsw_sp_span_port_buffer_update(mlxsw_sp_port, mtu);
 		if (err)
-			goto err_buffsize_update;
+			goto err_buffer_update;
 	}
 
 	return analyzed_port;
 
-err_buffsize_update:
+err_buffer_update:
 	list_del(&analyzed_port->list);
 	kfree(analyzed_port);
 	return ERR_PTR(err);
@@ -1152,15 +1161,13 @@ mlxsw_sp_span_analyzed_port_destroy(struct mlxsw_sp_span *span,
 				    analyzed_port)
 {
 	struct mlxsw_sp *mlxsw_sp = span->mlxsw_sp;
-	char sbib_pl[MLXSW_REG_SBIB_LEN];
 
 	/* Remove egress mirror buffer now that port is no longer analyzed
 	 * at egress.
 	 */
-	if (analyzed_port->egress) {
-		mlxsw_reg_sbib_pack(sbib_pl, analyzed_port->local_port, 0);
-		mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(sbib), sbib_pl);
-	}
+	if (analyzed_port->egress)
+		mlxsw_sp_span_port_buffer_disable(mlxsw_sp,
+						  analyzed_port->local_port);
 
 	list_del(&analyzed_port->list);
 	kfree(analyzed_port);
