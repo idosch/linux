@@ -21,12 +21,17 @@ struct mlxsw_sp_trap {
 	struct mlxsw_sp_trap_item *trap_items_arr;
 	u64 traps_count; /* Number of registered traps */
 
+	/* ASIC-specific traps */
+	const struct mlxsw_sp_trap_item *specific_trap_items_arr;
+	u64 specific_traps_count;
+
 	u64 max_policers;
 	unsigned long policers_usage[]; /* Usage bitmap */
 };
 
 struct mlxsw_sp_trap_ops {
 	int (*groups_init)(struct mlxsw_sp *mlxsw_sp);
+	int (*traps_init)(struct mlxsw_sp *mlxsw_sp);
 };
 
 extern const struct mlxsw_sp_trap_ops mlxsw_sp1_trap_ops;
