@@ -25,6 +25,9 @@ struct mlxsw_sp_trap_ops {
 	int (*groups_init)(struct mlxsw_sp *mlxsw_sp,
 			   const struct mlxsw_sp_trap_group_item **arr,
 			   u64 *p_groups_count);
+	int (*traps_init)(struct mlxsw_sp *mlxsw_sp,
+			  const struct mlxsw_sp_trap_item **arr,
+			  u64 *p_traps_count);
 };
 
 extern const struct mlxsw_sp_trap_ops mlxsw_sp1_trap_ops;
