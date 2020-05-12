@@ -4104,7 +4104,7 @@ static const struct mlxsw_listener mlxsw_sp_listener[] = {
 			     ROUTER_EXP, false),
 	/* PKT Sample trap */
 	MLXSW_RXL(mlxsw_sp_rx_listener_sample_func, PKT_SAMPLE, MIRROR_TO_CPU,
-		  false, SP_IP2ME, DISCARD),
+		  false, SP_PKT_SAMPLE, DISCARD),
 	/* ACL trap */
 	MLXSW_SP_RXL_NO_MARK(ACL0, TRAP_TO_CPU, IP2ME, false),
 	/* Multicast Router Traps */
@@ -4253,6 +4253,7 @@ static int mlxsw_sp_trap_groups_set(struct mlxsw_core *mlxsw_core)
 			priority = 1;
 			tc = 1;
 			break;
+		case MLXSW_REG_HTGT_TRAP_GROUP_SP_PKT_SAMPLE:
 		case MLXSW_REG_HTGT_TRAP_GROUP_SP_LBERROR:
 			priority = 0;
 			tc = 0;
