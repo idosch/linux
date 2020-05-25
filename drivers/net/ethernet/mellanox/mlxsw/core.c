@@ -1201,14 +1201,14 @@ mlxsw_devlink_trap_group_init(struct devlink *devlink,
 static int
 mlxsw_devlink_trap_group_set(struct devlink *devlink,
 			     const struct devlink_trap_group *group,
-			     const struct devlink_trap_policer *policer)
+			     const struct devlink_trap_policer *policer, u16 tc)
 {
 	struct mlxsw_core *mlxsw_core = devlink_priv(devlink);
 	struct mlxsw_driver *mlxsw_driver = mlxsw_core->driver;
 
 	if (!mlxsw_driver->trap_group_set)
 		return -EOPNOTSUPP;
-	return mlxsw_driver->trap_group_set(mlxsw_core, group, policer);
+	return mlxsw_driver->trap_group_set(mlxsw_core, group, policer, tc);
 }
 
 static int

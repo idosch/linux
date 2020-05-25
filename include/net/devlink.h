@@ -1080,7 +1080,8 @@ struct devlink_ops {
 	 */
 	int (*trap_group_set)(struct devlink *devlink,
 			      const struct devlink_trap_group *group,
-			      const struct devlink_trap_policer *policer);
+			      const struct devlink_trap_policer *policer,
+			      u16 tc);
 	/**
 	 * @trap_policer_init: Trap policer initialization function.
 	 *

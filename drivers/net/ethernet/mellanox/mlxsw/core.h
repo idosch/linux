@@ -329,7 +329,8 @@ struct mlxsw_driver {
 			       const struct devlink_trap_group *group);
 	int (*trap_group_set)(struct mlxsw_core *mlxsw_core,
 			      const struct devlink_trap_group *group,
-			      const struct devlink_trap_policer *policer);
+			      const struct devlink_trap_policer *policer,
+			      u16 tc);
 	int (*trap_policer_init)(struct mlxsw_core *mlxsw_core,
 				 const struct devlink_trap_policer *policer);
 	void (*trap_policer_fini)(struct mlxsw_core *mlxsw_core,

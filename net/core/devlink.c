@@ -5789,6 +5789,7 @@ struct devlink_trap_policer_item {
  * @policer_item: Associated policer item. Can be NULL.
  * @list: trap_group_list member.
  * @stats: Trap group statistics.
+ * @tc: Associated CPU traffic class.
  *
  * Describes packet trap group attributes. Created by devlink during trap
  * group registration.
@@ -5798,6 +5799,7 @@ struct devlink_trap_group_item {
 	struct devlink_trap_policer_item *policer_item;
 	struct list_head list;
 	struct devlink_stats __percpu *stats;
+	u16 tc;
 };
 
 /**
@@ -6216,6 +6218,9 @@ devlink_nl_trap_group_fill(struct sk_buff *msg, struct devlink *devlink,
 			group_item->policer_item->policer->id))
 		goto nla_put_failure;
 
+	if (nla_put_u16(msg, DEVLINK_ATTR_TRAP_TC, group_item->tc))
+		goto nla_put_failure;
+
 	err = devlink_trap_stats_put(msg, group_item->stats);
 	if (err)
 		goto nla_put_failure;
@@ -6364,8 +6369,10 @@ static int devlink_trap_group_set(struct devlink *devlink,
 	const struct devlink_trap_policer *policer;
 	struct nlattr **attrs = info->attrs;
 	int err;
+	u16 tc;
 
-	if (!attrs[DEVLINK_ATTR_TRAP_POLICER_ID])
+	if (!attrs[DEVLINK_ATTR_TRAP_POLICER_ID] &&
+	    !attrs[DEVLINK_ATTR_TRAP_TC])
 		return 0;
 
 	if (!devlink->ops->trap_group_set)
@@ -6385,11 +6392,22 @@ static int devlink_trap_group_set(struct devlink *devlink,
 	}
 	policer = policer_item ? policer_item->policer : NULL;
 
-	err = devlink->ops->trap_group_set(devlink, group_item->group, policer);
+	tc = group_item->tc;
+	if (attrs[DEVLINK_ATTR_TRAP_TC]) {
+		tc = nla_get_u16(attrs[DEVLINK_ATTR_TRAP_TC]);
+		if (tc > group_item->group->max_tc) {
+			NL_SET_ERR_MSG_MOD(extack, "TC higher than limit");
+			return -EINVAL;
+		}
+	}
+
+	err = devlink->ops->trap_group_set(devlink, group_item->group, policer,
+					   tc);
 	if (err)
 		return err;
 
 	group_item->policer_item = policer_item;
+	group_item->tc = tc;
 
 	return 0;
 }
@@ -6709,6 +6727,7 @@ static const struct nla_policy devlink_nl_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_TRAP_POLICER_ID] = { .type = NLA_U32 },
 	[DEVLINK_ATTR_TRAP_POLICER_RATE] = { .type = NLA_U64 },
 	[DEVLINK_ATTR_TRAP_POLICER_BURST] = { .type = NLA_U64 },
+	[DEVLINK_ATTR_TRAP_TC] = { .type = NLA_U16 },
 };
 
 static const struct genl_ops devlink_nl_ops[] = {
@@ -8979,6 +8998,7 @@ devlink_trap_group_register(struct devlink *devlink,
 	}
 
 	group_item->group = group;
+	group_item->tc = group->init_tc;
 
 	err = devlink_trap_group_item_policer_link(devlink, group_item);
 	if (err)
