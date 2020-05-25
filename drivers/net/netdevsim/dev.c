@@ -453,6 +453,11 @@ enum {
 			     NSIM_DEV_TRAP_POLICER_MAX_BURST,		      \
 			     NSIM_DEV_TRAP_POLICER_MIN_BURST)
 
+#define NSIM_DEV_TRAP_MAX_TC	5
+
+#define NSIM_TRAP_GROUP(_id, _policer_id, _tc)				      \
+	DEVLINK_TRAP_GROUP_GENERIC(_id, _policer_id, _tc, NSIM_DEV_TRAP_MAX_TC)
+
 static const struct devlink_trap_policer nsim_trap_policers_arr[] = {
 	NSIM_TRAP_POLICER(1, 1000, 128),
 	NSIM_TRAP_POLICER(2, 2000, 256),
@@ -460,12 +465,12 @@ static const struct devlink_trap_policer nsim_trap_policers_arr[] = {
 };
 
 static const struct devlink_trap_group nsim_trap_groups_arr[] = {
-	DEVLINK_TRAP_GROUP_GENERIC(L2_DROPS, 0),
-	DEVLINK_TRAP_GROUP_GENERIC(L3_DROPS, 1),
-	DEVLINK_TRAP_GROUP_GENERIC(L3_EXCEPTIONS, 1),
-	DEVLINK_TRAP_GROUP_GENERIC(BUFFER_DROPS, 2),
-	DEVLINK_TRAP_GROUP_GENERIC(ACL_DROPS, 3),
-	DEVLINK_TRAP_GROUP_GENERIC(MC_SNOOPING, 3),
+	NSIM_TRAP_GROUP(L2_DROPS, 0, 0),
+	NSIM_TRAP_GROUP(L3_DROPS, 1, 0),
+	NSIM_TRAP_GROUP(L3_EXCEPTIONS, 1, 1),
+	NSIM_TRAP_GROUP(BUFFER_DROPS, 2, 0),
+	NSIM_TRAP_GROUP(ACL_DROPS, 3, 1),
+	NSIM_TRAP_GROUP(MC_SNOOPING, 3, 3),
 };
 
 static const struct devlink_trap nsim_traps_arr[] = {

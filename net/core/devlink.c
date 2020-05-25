@@ -8644,6 +8644,9 @@ devlink_trap_group_driver_verify(const struct devlink_trap_group *group)
 
 static int devlink_trap_group_verify(const struct devlink_trap_group *group)
 {
+	if (WARN_ON(group->init_tc > group->max_tc))
+		return -EINVAL;
+
 	if (group->generic)
 		return devlink_trap_group_generic_verify(group);
 	else

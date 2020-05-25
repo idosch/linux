@@ -20,7 +20,6 @@ struct mlxsw_sp_trap_policer_item {
 struct mlxsw_sp_trap_group_item {
 	struct devlink_trap_group group;
 	u16 hw_group_id;
-	u8 priority;
 };
 
 #define MLXSW_SP_TRAP_LISTENERS_MAX 3
@@ -271,6 +270,12 @@ static void mlxsw_sp_rx_sample_listener(struct sk_buff *skb, u8 local_port,
 			     1 << MLXSW_REG_QPCR_HIGHEST_CBS,		      \
 			     1 << MLXSW_REG_QPCR_LOWEST_CBS)
 
+#define MLXSW_SP_TRAP_HIGHEST_TC	5
+
+#define MLXSW_SP_TRAP_GROUP(_id, _policer_id, _tc)			      \
+	DEVLINK_TRAP_GROUP_GENERIC(_id, _policer_id, _tc,		      \
+				   MLXSW_SP_TRAP_HIGHEST_TC)
+
 /* Ordered by policer identifier */
 static const struct mlxsw_sp_trap_policer_item
 mlxsw_sp_trap_policer_items_arr[] = {
@@ -332,119 +337,96 @@ mlxsw_sp_trap_policer_items_arr[] = {
 
 static const struct mlxsw_sp_trap_group_item mlxsw_sp_trap_group_items_arr[] = {
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(L2_DROPS, 1),
+		.group = MLXSW_SP_TRAP_GROUP(L2_DROPS, 1, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_L2_DISCARDS,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(L3_DROPS, 1),
+		.group = MLXSW_SP_TRAP_GROUP(L3_DROPS, 1, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_L3_DISCARDS,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(L3_EXCEPTIONS, 1),
+		.group = MLXSW_SP_TRAP_GROUP(L3_EXCEPTIONS, 1, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_L3_EXCEPTIONS,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(TUNNEL_DROPS, 1),
+		.group = MLXSW_SP_TRAP_GROUP(TUNNEL_DROPS, 1, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_TUNNEL_DISCARDS,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(ACL_DROPS, 1),
+		.group = MLXSW_SP_TRAP_GROUP(ACL_DROPS, 1, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_ACL_DISCARDS,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(STP, 2),
+		.group = MLXSW_SP_TRAP_GROUP(STP, 2, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_STP,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(LACP, 3),
+		.group = MLXSW_SP_TRAP_GROUP(LACP, 3, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_LACP,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(LLDP, 4),
+		.group = MLXSW_SP_TRAP_GROUP(LLDP, 4, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_LLDP,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(MC_SNOOPING, 5),
+		.group = MLXSW_SP_TRAP_GROUP(MC_SNOOPING, 5, 3),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_MC_SNOOPING,
-		.priority = 3,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(DHCP, 6),
+		.group = MLXSW_SP_TRAP_GROUP(DHCP, 6, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_DHCP,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(NEIGH_DISCOVERY, 7),
+		.group = MLXSW_SP_TRAP_GROUP(NEIGH_DISCOVERY, 7, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_NEIGH_DISCOVERY,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(BFD, 8),
+		.group = MLXSW_SP_TRAP_GROUP(BFD, 8, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_BFD,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(OSPF, 9),
+		.group = MLXSW_SP_TRAP_GROUP(OSPF, 9, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_OSPF,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(BGP, 10),
+		.group = MLXSW_SP_TRAP_GROUP(BGP, 10, 4),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_BGP,
-		.priority = 4,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(VRRP, 11),
+		.group = MLXSW_SP_TRAP_GROUP(VRRP, 11, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_VRRP,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(PIM, 12),
+		.group = MLXSW_SP_TRAP_GROUP(PIM, 12, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_PIM,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(UC_LB, 13),
+		.group = MLXSW_SP_TRAP_GROUP(UC_LB, 13, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_LBERROR,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(LOCAL_DELIVERY, 14),
+		.group = MLXSW_SP_TRAP_GROUP(LOCAL_DELIVERY, 14, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_IP2ME,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(IPV6, 15),
+		.group = MLXSW_SP_TRAP_GROUP(IPV6, 15, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_IPV6,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(PTP_EVENT, 16),
+		.group = MLXSW_SP_TRAP_GROUP(PTP_EVENT, 16, 5),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_PTP0,
-		.priority = 5,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(PTP_GENERAL, 17),
+		.group = MLXSW_SP_TRAP_GROUP(PTP_GENERAL, 17, 2),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_PTP1,
-		.priority = 2,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(ACL_SAMPLE, 0),
+		.group = MLXSW_SP_TRAP_GROUP(ACL_SAMPLE, 0, 0),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_PKT_SAMPLE,
-		.priority = 0,
 	},
 	{
-		.group = DEVLINK_TRAP_GROUP_GENERIC(ACL_TRAP, 18),
+		.group = MLXSW_SP_TRAP_GROUP(ACL_TRAP, 18, 4),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_FLOW_LOGGING,
-		.priority = 4,
 	},
 };
 
@@ -1406,7 +1388,7 @@ __mlxsw_sp_trap_group_init(struct mlxsw_core *mlxsw_core,
 	}
 
 	mlxsw_reg_htgt_pack(htgt_pl, group_item->hw_group_id, hw_policer_id,
-			    group_item->priority, group_item->priority);
+			    group->init_tc, group->init_tc);
 	return mlxsw_reg_write(mlxsw_core, MLXSW_REG(htgt), htgt_pl);
 }
 
