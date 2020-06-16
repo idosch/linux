@@ -452,6 +452,7 @@ enum devlink_attr {
 	DEVLINK_ATTR_TRAP_POLICER_BURST,		/* u64 */
 
 	DEVLINK_ATTR_PORT_LANES,			/* u32 */
+	DEVLINK_ATTR_PORT_SPLITTABLE,			/* u8 */
 
 	/* add new attributes above here, update the policy in devlink.c */
 
