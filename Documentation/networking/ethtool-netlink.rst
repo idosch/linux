@@ -443,10 +443,11 @@ supports.
 LINKSTATE_GET
 =============
 
-Requests link state information. At the moment, only link up/down flag (as
-provided by ``ETHTOOL_GLINK`` ioctl command) is provided but some future
-extensions are planned (e.g. link down reason). This request does not have any
-attributes.
+Requests link state information. Link up/down flag (as provided by
+``ETHTOOL_GLINK`` ioctl command) is provided. Optionally, extended state might
+be provided as well. In general, extended state describes reasons for why a port
+is down, or why it operates in some non-obvious mode. This request does not have
+any attributes.
 
 Request contents:
 
@@ -461,15 +462,116 @@ Kernel response contents:
   ``ETHTOOL_A_LINKSTATE_LINK``          bool    link state (up/down)
   ``ETHTOOL_A_LINKSTATE_SQI``           u32     Current Signal Quality Index
   ``ETHTOOL_A_LINKSTATE_SQI_MAX``       u32     Max support SQI value
+  ``ETHTOOL_A_LINKSTATE_EXT_STATE``     u8      link extended state
+  ``ETHTOOL_A_LINKSTATE_EXT_SUBSTATE``  u8      link extended substate
   ====================================  ======  ============================
 
 For most NIC drivers, the value of ``ETHTOOL_A_LINKSTATE_LINK`` returns
 carrier flag provided by ``netif_carrier_ok()`` but there are drivers which
 define their own handler.
 
+``ETHTOOL_A_LINKSTATE_EXT_STATE`` and ``ETHTOOL_A_LINKSTATE_EXT_SUBSTATE`` are
+optional values. ethtool core can provide either both
+``ETHTOOL_A_LINKSTATE_EXT_STATE`` and ``ETHTOOL_A_LINKSTATE_EXT_SUBSTATE``,
+or only ``ETHTOOL_A_LINKSTATE_EXT_STATE``, or none of them.
+
 ``LINKSTATE_GET`` allows dump requests (kernel returns reply messages for all
 devices supporting the request).
 
+
+Link extended states:
+
+  ============================    =============================================
+  ``Autoneg``                     States relating to the autonegotiation or
+                                  issues therein
+
+  ``Link training failure``       Failure during link training
+
+  ``Link logical mismatch``       Logical mismatch in physical coding sublayer
+                                  or forward error correction sublayer
+
+  ``Bad signal integrity``        Signal integrity issues
+
+  ``No cable``                    No cable connected
+
+  ``Cable issue``                 Failure is related to cable,
+                                  e.g., unsupported cable
+
+  ``EEPROM issue``                Failure is related to EEPROM, e.g., failure
+                                  during reading or parsing the data
+
+  ``Calibration failure``         Failure during calibration algorithm
+
+  ``Power budget exceeded``       The hardware is not able to provide the
+                                  power required from cable or module
+
+  ``Overheat``                    The module is overheated
+  ============================    =============================================
+
+Link extended substates:
+
+  Autoneg substates:
+
+  ==============================================    =============================================
+  ``No partner detected``                           Peer side is down
+
+  ``Ack not received``                              Ack not received from peer side
+
+  ``Next page exchange failed``                     Next page exchange failed
+
+  ``No partner detected during force mode``         Peer side is down during force mode or there
+                                                    is no agreement of speed
+
+  ``FEC mismatch during override``                  Forward error correction modes in both sides
+                                                    are mismatched
+
+  ``No HCD``                                        No Highest Common Denominator
+  ==============================================    =============================================
+
+  Link training substates:
+
+  ==============================================    =============================================
+  ``KR frame lock not acquired``                    Frames were not recognized, the lock failed
+
+  ``KR link inhibit timeout``                       The lock did not occur before timeout
+
+  ``KR Link partner did not set receiver ready``    Peer side did not send ready signal after
+                                                    training process
+
+  ``Remote side is not ready yet``                  Remote side is not ready yet
+
+  ==============================================    =============================================
+
+  Link logical mismatch substates:
+
+  ==============================================    =============================================
+  ``PCS did not acquire block lock``                Physical coding sublayer was not locked in
+                                                    first phase - block lock
+
+  ``PCS did not acquire AM lock``                   Physical coding sublayer was not locked in
+                                                    second phase - alignment markers lock
+
+  ``PCS did not get align_status``                  Physical coding sublayer did not get align
+                                                    status
+
+  ``FC FEC is not locked``                          FC forward error correction is not locked
+
+  ``RS FEC is not locked``                          RS forward error correction is not locked
+  ==============================================    =============================================
+
+  Bad signal integrity substates:
+
+  ==============================================    =============================================
+  ``Large number of physical errors``               Large number of physical errors
+
+  ``Unsupported rate``                              The system attempted to operate the cable at
+                                                    a rate that is not formally supported, which
+                                                    led to signal integrity issues
+
+  ``Unsupported cable``                             Unsupported cable
+
+  ``Cable test failure``                            Cable test failure
+  ==============================================    =============================================
 
 DEBUG_GET
 =========
