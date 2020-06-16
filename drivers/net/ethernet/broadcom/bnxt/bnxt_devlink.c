@@ -685,6 +685,9 @@ static void bnxt_dl_params_unregister(struct bnxt *bp)
 
 int bnxt_dl_register(struct bnxt *bp)
 {
+	struct devlink_port_attrs attrs = {};
+	const unsigned char *switch_id;
+	unsigned char switch_id_len;
 	struct devlink *dl;
 	int rc;
 
@@ -713,9 +716,13 @@ int bnxt_dl_register(struct bnxt *bp)
 	if (!BNXT_PF(bp))
 		return 0;
 
-	devlink_port_attrs_set(&bp->dl_port, DEVLINK_PORT_FLAVOUR_PHYSICAL,
-			       bp->pf.port_id, false, 0, bp->dsn,
-			       sizeof(bp->dsn));
+	attrs.flavour = DEVLINK_PORT_FLAVOUR_PHYSICAL;
+	attrs.phys.port_number = bp->pf.port_id;
+	switch_id = bp->dsn;
+	switch_id_len = sizeof(bp->dsn);
+	memcpy(attrs.switch_id.id, switch_id, switch_id_len);
+	attrs.switch_id.id_len = switch_id_len;
+	devlink_port_attrs_set(&bp->dl_port, &attrs);
 	rc = devlink_port_register(dl, &bp->dl_port, bp->pf.port_id);
 	if (rc) {
 		netdev_err(bp->dev, "devlink_port_register failed\n");
