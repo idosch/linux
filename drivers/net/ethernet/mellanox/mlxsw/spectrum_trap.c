@@ -1481,6 +1481,9 @@ static int __mlxsw_sp_trap_policer_set(struct mlxsw_sp *mlxsw_sp, u16 hw_id,
 	if (err)
 		return err;
 
+	if (burst < DIV_ROUND_UP(rate * mlxsw_sp->policer_bs_factor, 100))
+		NL_SET_ERR_MSG_MOD(extack, "Policer burst size too low for requested rate");
+
 	mlxsw_reg_qpcr_pack(qpcr_pl, hw_id, MLXSW_REG_QPCR_IR_UNITS_M, false,
 			    rate, burst_size);
 	mlxsw_reg_qpcr_clear_counter_set(qpcr_pl, clear_counter);

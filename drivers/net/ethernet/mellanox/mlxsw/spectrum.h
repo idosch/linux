@@ -176,6 +176,7 @@ struct mlxsw_sp {
 	const struct mlxsw_listener *listeners;
 	size_t listeners_count;
 	u32 lowest_shaper_bs;
+	u32 policer_bs_factor;
 };
 
 struct mlxsw_sp_ptp_ops {

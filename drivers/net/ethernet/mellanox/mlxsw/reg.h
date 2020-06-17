@@ -3409,6 +3409,9 @@ MLXSW_ITEM64(reg, qpcr, violate_count, 0x20, 0, 64);
 #define MLXSW_REG_QPCR_HIGHEST_CIR	(2 * 1000 * 1000 * 1000) /* 2Gpps */
 #define MLXSW_REG_QPCR_LOWEST_CBS	4
 #define MLXSW_REG_QPCR_HIGHEST_CBS	24
+#define MLXSW_REG_QPCR_CBS_FACTOR_SP1	5
+#define MLXSW_REG_QPCR_CBS_FACTOR_SP2	40
+#define MLXSW_REG_QPCR_CBS_FACTOR_SP3	40
 
 static inline void mlxsw_reg_qpcr_pack(char *payload, u16 pid,
 				       enum mlxsw_reg_qpcr_ir_units ir_units,
