@@ -5,6 +5,7 @@
 #include <linux/log2.h>
 #include <linux/mutex.h>
 #include <linux/netlink.h>
+#include <net/devlink.h>
 
 #include "spectrum.h"
 
@@ -23,6 +24,7 @@ struct mlxsw_sp_policer_family {
 	u16 end_index; /* Exclusive */
 	struct idr policer_idr;
 	struct mutex lock; /* Protects policer_idr */
+	atomic_t policers_count;
 	const struct mlxsw_sp_policer_family_ops *ops;
 };
 
@@ -97,10 +99,18 @@ mlxsw_sp_policer_single_rate_compare_index(const struct mlxsw_sp_policer_family 
 	       policer_index < family->end_index;
 }
 
+static u64 mlxsw_sp_policer_single_rate_occ_get(void *priv)
+{
+	struct mlxsw_sp_policer_family *family = priv;
+
+	return atomic_read(&family->policers_count);
+}
+
 static int
 mlxsw_sp_policer_single_rate_family_init(struct mlxsw_sp_policer_family *family)
 {
 	struct mlxsw_core *core = family->mlxsw_sp->core;
+	struct devlink *devlink;
 
 	/* CPU policers are allocated from the first N policers in the global
 	 * range, so skip them. They will be added later on as another policer
@@ -113,12 +123,24 @@ mlxsw_sp_policer_single_rate_family_init(struct mlxsw_sp_policer_family *family)
 	family->start_index = MLXSW_CORE_RES_GET(core, MAX_CPU_POLICERS);
 	family->end_index = MLXSW_CORE_RES_GET(core, MAX_GLOBAL_POLICERS);
 
+	atomic_set(&family->policers_count, 0);
+	devlink = priv_to_devlink(core);
+	devlink_resource_occ_get_register(devlink,
+					  MLXSW_SP_RESOURCE_SINGLE_RATE_POLICERS,
+					  mlxsw_sp_policer_single_rate_occ_get,
+					  family);
+
 	return 0;
 }
 
 static void
 mlxsw_sp_policer_single_rate_family_fini(struct mlxsw_sp_policer_family *family)
 {
+	struct devlink *devlink = priv_to_devlink(family->mlxsw_sp->core);
+
+	devlink_resource_occ_get_unregister(devlink,
+					    MLXSW_SP_RESOURCE_SINGLE_RATE_POLICERS);
+	WARN_ON(atomic_read(&family->policers_count) != 0);
 }
 
 static int
@@ -132,6 +154,7 @@ mlxsw_sp_policer_single_rate_index_alloc(struct mlxsw_sp_policer_family *family,
 	if (id < 0)
 		return id;
 
+	atomic_inc(&family->policers_count);
 	policer->index = id;
 
 	return 0;
@@ -141,6 +164,7 @@ static void
 mlxsw_sp_policer_single_rate_index_free(struct mlxsw_sp_policer_family *family,
 					u16 policer_index)
 {
+	atomic_dec(&family->policers_count);
 	WARN_ON(!idr_remove(&family->policer_idr, policer_index));
 }
 
@@ -459,6 +483,46 @@ void mlxsw_sp_policers_fini(struct mlxsw_sp *mlxsw_sp)
 	}
 
 	kfree(mlxsw_sp->policer_core);
+}
+
+int mlxsw_sp_policer_resources_register(struct mlxsw_core *mlxsw_core)
+{
+	u64 global_policers, cpu_policers, single_rate_policers;
+	struct devlink *devlink = priv_to_devlink(mlxsw_core);
+	struct devlink_resource_size_params size_params;
+	int err;
+
+	if (!MLXSW_CORE_RES_VALID(mlxsw_core, MAX_GLOBAL_POLICERS) ||
+	    !MLXSW_CORE_RES_VALID(mlxsw_core, MAX_CPU_POLICERS))
+		return -EIO;
+
+	global_policers = MLXSW_CORE_RES_GET(mlxsw_core, MAX_GLOBAL_POLICERS);
+	cpu_policers = MLXSW_CORE_RES_GET(mlxsw_core, MAX_CPU_POLICERS);
+	single_rate_policers = global_policers - cpu_policers;
+
+	devlink_resource_size_params_init(&size_params, global_policers,
+					  global_policers, 1,
+					  DEVLINK_RESOURCE_UNIT_ENTRY);
+	err = devlink_resource_register(devlink, "global_policers",
+					global_policers,
+					MLXSW_SP_RESOURCE_GLOBAL_POLICERS,
+					DEVLINK_RESOURCE_ID_PARENT_TOP,
+					&size_params);
+	if (err)
+		return err;
+
+	devlink_resource_size_params_init(&size_params, single_rate_policers,
+					  single_rate_policers, 1,
+					  DEVLINK_RESOURCE_UNIT_ENTRY);
+	err = devlink_resource_register(devlink, "single_rate_policers",
+					single_rate_policers,
+					MLXSW_SP_RESOURCE_SINGLE_RATE_POLICERS,
+					MLXSW_SP_RESOURCE_GLOBAL_POLICERS,
+					&size_params);
+	if (err)
+		return err;
+
+	return 0;
 }
 
 static int
