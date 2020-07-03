@@ -622,18 +622,21 @@ static int tcf_block_setup(struct tcf_block *block,
 			   struct flow_block_offload *bo);
 
 static void tcf_block_offload_init(struct flow_block_offload *bo,
-				   struct net_device *dev,
+				   struct Qdisc *sch,
 				   enum flow_block_command command,
 				   enum flow_block_binder_type binder_type,
 				   struct flow_block *flow_block,
 				   bool shared, struct netlink_ext_ack *extack)
 {
+	struct net_device *dev = sch->dev_queue->dev;
+
 	bo->net = dev_net(dev);
 	bo->command = command;
 	bo->binder_type = binder_type;
 	bo->block = flow_block;
 	bo->block_shared = shared;
 	bo->extack = extack;
+	bo->sch = sch;
 	INIT_LIST_HEAD(&bo->cb_list);
 }
 
@@ -643,11 +646,11 @@ static void tcf_block_unbind(struct tcf_block *block,
 static void tc_block_indr_cleanup(struct flow_block_cb *block_cb)
 {
 	struct tcf_block *block = block_cb->indr.data;
-	struct net_device *dev = block_cb->indr.dev;
+	struct Qdisc *sch = block_cb->indr.sch;
 	struct netlink_ext_ack extack = {};
 	struct flow_block_offload bo;
 
-	tcf_block_offload_init(&bo, dev, FLOW_BLOCK_UNBIND,
+	tcf_block_offload_init(&bo, sch, FLOW_BLOCK_UNBIND,
 			       block_cb->indr.binder_type,
 			       &block->flow_block, tcf_block_shared(block),
 			       &extack);
@@ -666,14 +669,15 @@ static bool tcf_block_offload_in_use(struct tcf_block *block)
 }
 
 static int tcf_block_offload_cmd(struct tcf_block *block,
-				 struct net_device *dev,
+				 struct Qdisc *sch,
 				 struct tcf_block_ext_info *ei,
 				 enum flow_block_command command,
 				 struct netlink_ext_ack *extack)
 {
+	struct net_device *dev = sch->dev_queue->dev;
 	struct flow_block_offload bo = {};
 
-	tcf_block_offload_init(&bo, dev, command, ei->binder_type,
+	tcf_block_offload_init(&bo, sch, command, ei->binder_type,
 			       &block->flow_block, tcf_block_shared(block),
 			       extack);
 
@@ -690,7 +694,7 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 		return tcf_block_setup(block, &bo);
 	}
 
-	flow_indr_dev_setup_offload(dev, TC_SETUP_BLOCK, block, &bo,
+	flow_indr_dev_setup_offload(sch, TC_SETUP_BLOCK, block, &bo,
 				    tc_block_indr_cleanup);
 	tcf_block_setup(block, &bo);
 
@@ -717,7 +721,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 		goto err_unlock;
 	}
 
-	err = tcf_block_offload_cmd(block, dev, ei, FLOW_BLOCK_BIND, extack);
+	err = tcf_block_offload_cmd(block, q, ei, FLOW_BLOCK_BIND, extack);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_inc;
 	if (err)
@@ -740,11 +744,10 @@ err_unlock:
 static void tcf_block_offload_unbind(struct tcf_block *block, struct Qdisc *q,
 				     struct tcf_block_ext_info *ei)
 {
-	struct net_device *dev = q->dev_queue->dev;
 	int err;
 
 	down_write(&block->cb_lock);
-	err = tcf_block_offload_cmd(block, dev, ei, FLOW_BLOCK_UNBIND, NULL);
+	err = tcf_block_offload_cmd(block, q, ei, FLOW_BLOCK_UNBIND, NULL);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_dec;
 	up_write(&block->cb_lock);
