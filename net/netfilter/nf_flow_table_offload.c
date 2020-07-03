@@ -928,26 +928,27 @@ static int nf_flow_table_block_setup(struct nf_flowtable *flowtable,
 }
 
 static void nf_flow_table_block_offload_init(struct flow_block_offload *bo,
-					     struct net *net,
+					     struct net_device *dev,
 					     enum flow_block_command cmd,
 					     struct nf_flowtable *flowtable,
 					     struct netlink_ext_ack *extack)
 {
 	memset(bo, 0, sizeof(*bo));
-	bo->net		= net;
+	bo->net		= dev_net(dev);
 	bo->block	= &flowtable->flow_block;
 	bo->command	= cmd;
 	bo->binder_type	= FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS;
 	bo->extack	= extack;
+	bo->sch		= dev_ingress_queue(dev)->qdisc_sleeping;
 	INIT_LIST_HEAD(&bo->cb_list);
 }
 
 static void nf_flow_table_indr_cleanup(struct flow_block_cb *block_cb)
 {
 	struct nf_flowtable *flowtable = block_cb->indr.data;
-	struct net_device *dev = block_cb->indr.dev;
+	struct Qdisc *sch = block_cb->indr.sch;
 
-	nf_flow_table_gc_cleanup(flowtable, dev);
+	nf_flow_table_gc_cleanup(flowtable, sch->dev_queue->dev);
 	down_write(&flowtable->flow_block_lock);
 	list_del(&block_cb->list);
 	list_del(&block_cb->driver_list);
@@ -961,10 +962,9 @@ static int nf_flow_table_indr_offload_cmd(struct flow_block_offload *bo,
 					  enum flow_block_command cmd,
 					  struct netlink_ext_ack *extack)
 {
-	nf_flow_table_block_offload_init(bo, dev_net(dev), cmd, flowtable,
-					 extack);
+	nf_flow_table_block_offload_init(bo, dev, cmd, flowtable, extack);
 
-	return flow_indr_dev_setup_offload(dev, TC_SETUP_FT, flowtable, bo,
+	return flow_indr_dev_setup_offload(bo->sch, TC_SETUP_FT, flowtable, bo,
 					   nf_flow_table_indr_cleanup);
 }
 
@@ -976,8 +976,7 @@ static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
 {
 	int err;
 
-	nf_flow_table_block_offload_init(bo, dev_net(dev), cmd, flowtable,
-					 extack);
+	nf_flow_table_block_offload_init(bo, dev, cmd, flowtable, extack);
 	err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_FT, bo);
 	if (err < 0)
 		return err;
