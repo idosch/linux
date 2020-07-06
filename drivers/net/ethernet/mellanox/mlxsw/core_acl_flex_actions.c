@@ -88,9 +88,11 @@ struct mlxsw_afa_set {
 	struct rhash_head ht_node;
 	struct mlxsw_afa_set_ht_key ht_key;
 	u32 kvdl_index;
-	bool shared; /* Inserted in hashtable (doesn't mean that
+	u8 shared:1, /* Inserted in hashtable (doesn't mean that
 		      * kvdl_index is valid).
 		      */
+	   has_trap:1,
+	   has_police:1;
 	unsigned int ref_count;
 	struct mlxsw_afa_set *next; /* Pointer to the next set. */
 	struct mlxsw_afa_set *prev; /* Pointer to the previous set,
@@ -839,16 +841,44 @@ err_cookie_get:
 #define MLXSW_AFA_ONE_ACTION_LEN 32
 #define MLXSW_AFA_PAYLOAD_OFFSET 4
 
-static char *mlxsw_afa_block_append_action(struct mlxsw_afa_block *block,
-					   u8 action_code, u8 action_size)
+struct mlxsw_afa_action_params {
+	u8 action_code;
+	u8 action_size;
+	u8 is_trap:1,
+	   is_police:1;
+};
+
+static bool
+mlxsw_afa_block_need_split(const struct mlxsw_afa_block *block,
+			   const struct mlxsw_afa_action_params *params)
 {
+	struct mlxsw_afa_set *cur_set = block->cur_set;
+
+	/* Due to a hardware limitation, police action cannot be in the same
+	 * action set with MLXSW_AFA_TRAP_CODE or MLXSW_AFA_TRAPWU_CODE
+	 * actions. Work around this limitation by creating a new action set
+	 * and place the new action there.
+	 */
+	if ((cur_set->has_trap && params->is_police) ||
+	    (cur_set->has_police && params->is_trap))
+		return true;
+
+	return false;
+}
+
+static char *
+mlxsw_afa_block_append_action_ext(struct mlxsw_afa_block *block,
+				  const struct mlxsw_afa_action_params *params)
+{
+	u8 action_code = params->action_code;
+	u8 action_size = params->action_size;
 	char *oneact;
 	char *actions;
 
 	if (block->finished)
 		return ERR_PTR(-EINVAL);
-	if (block->cur_act_index + action_size >
-	    block->afa->max_acts_per_set) {
+	if (block->cur_act_index + action_size > block->afa->max_acts_per_set ||
+	    mlxsw_afa_block_need_split(block, params)) {
 		struct mlxsw_afa_set *set;
 
 		/* The appended action won't fit into the current action set,
@@ -863,11 +893,26 @@ static char *mlxsw_afa_block_append_action(struct mlxsw_afa_block *block,
 		block->cur_set = set;
 	}
 
+	if (params->is_trap)
+		block->cur_set->has_trap = true;
+	else if (params->is_police)
+		block->cur_set->has_police = true;
+
 	actions = block->cur_set->ht_key.enc_actions;
 	oneact = actions + block->cur_act_index * MLXSW_AFA_ONE_ACTION_LEN;
 	block->cur_act_index += action_size;
 	mlxsw_afa_all_action_type_set(oneact, action_code);
 	return oneact + MLXSW_AFA_PAYLOAD_OFFSET;
+}
+
+static char *mlxsw_afa_block_append_action(struct mlxsw_afa_block *block,
+					   u8 action_code, u8 action_size)
+{
+	struct mlxsw_afa_action_params params = {};
+
+	params.action_code = action_code;
+	params.action_size = action_size;
+	return mlxsw_afa_block_append_action_ext(block, &params);
 }
 
 /* VLAN Action
@@ -1048,11 +1093,23 @@ mlxsw_afa_trap_mirror_pack(char *payload, bool mirror_enable,
 	mlxsw_afa_trap_mirror_agent_set(payload, mirror_agent);
 }
 
+static char *mlxsw_afa_block_append_action_trap(struct mlxsw_afa_block *block,
+						u8 action_code, u8 action_size)
+{
+	struct mlxsw_afa_action_params params = {};
+
+	params.action_code = action_code;
+	params.action_size = action_size;
+	params.is_trap = true;
+	return mlxsw_afa_block_append_action_ext(block, &params);
+}
+
 static int mlxsw_afa_block_append_drop_plain(struct mlxsw_afa_block *block,
 					     bool ingress)
 {
-	char *act = mlxsw_afa_block_append_action(block, MLXSW_AFA_TRAP_CODE,
-						  MLXSW_AFA_TRAP_SIZE);
+	char *act = mlxsw_afa_block_append_action_trap(block,
+						       MLXSW_AFA_TRAP_CODE,
+						       MLXSW_AFA_TRAP_SIZE);
 
 	if (IS_ERR(act))
 		return PTR_ERR(act);
@@ -1081,8 +1138,8 @@ mlxsw_afa_block_append_drop_with_cookie(struct mlxsw_afa_block *block,
 	}
 	cookie_index = cookie_ref->cookie->cookie_index;
 
-	act = mlxsw_afa_block_append_action(block, MLXSW_AFA_TRAPWU_CODE,
-					    MLXSW_AFA_TRAPWU_SIZE);
+	act = mlxsw_afa_block_append_action_trap(block, MLXSW_AFA_TRAPWU_CODE,
+						 MLXSW_AFA_TRAPWU_SIZE);
 	if (IS_ERR(act)) {
 		NL_SET_ERR_MSG_MOD(extack, "Cannot append drop with cookie action");
 		err = PTR_ERR(act);
@@ -1113,8 +1170,9 @@ EXPORT_SYMBOL(mlxsw_afa_block_append_drop);
 
 int mlxsw_afa_block_append_trap(struct mlxsw_afa_block *block, u16 trap_id)
 {
-	char *act = mlxsw_afa_block_append_action(block, MLXSW_AFA_TRAP_CODE,
-						  MLXSW_AFA_TRAP_SIZE);
+	char *act = mlxsw_afa_block_append_action_trap(block,
+						       MLXSW_AFA_TRAP_CODE,
+						       MLXSW_AFA_TRAP_SIZE);
 
 	if (IS_ERR(act))
 		return PTR_ERR(act);
@@ -1127,8 +1185,9 @@ EXPORT_SYMBOL(mlxsw_afa_block_append_trap);
 int mlxsw_afa_block_append_trap_and_forward(struct mlxsw_afa_block *block,
 					    u16 trap_id)
 {
-	char *act = mlxsw_afa_block_append_action(block, MLXSW_AFA_TRAP_CODE,
-						  MLXSW_AFA_TRAP_SIZE);
+	char *act = mlxsw_afa_block_append_action_trap(block,
+						       MLXSW_AFA_TRAP_CODE,
+						       MLXSW_AFA_TRAP_SIZE);
 
 	if (IS_ERR(act))
 		return PTR_ERR(act);
@@ -1199,9 +1258,10 @@ static int
 mlxsw_afa_block_append_allocated_mirror(struct mlxsw_afa_block *block,
 					u8 mirror_agent)
 {
-	char *act = mlxsw_afa_block_append_action(block,
-						  MLXSW_AFA_TRAP_CODE,
-						  MLXSW_AFA_TRAP_SIZE);
+	char *act = mlxsw_afa_block_append_action_trap(block,
+						       MLXSW_AFA_TRAP_CODE,
+						       MLXSW_AFA_TRAP_SIZE);
+
 	if (IS_ERR(act))
 		return PTR_ERR(act);
 	mlxsw_afa_trap_pack(act, MLXSW_AFA_TRAP_TRAP_ACTION_NOP,
