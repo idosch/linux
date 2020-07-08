@@ -104,6 +104,7 @@ static int mlxsw_ports_init(struct mlxsw_core *mlxsw_core)
 
 	return 0;
 }
+ALLOW_ERROR_INJECTION(mlxsw_ports_init, ERRNO);
 
 static void mlxsw_ports_fini(struct mlxsw_core *mlxsw_core)
 {
