@@ -9533,6 +9533,14 @@ MLXSW_ITEM32(reg, mogcr, ptp_iftc, 0x00, 1, 1);
  */
 MLXSW_ITEM32(reg, mogcr, ptp_eftc, 0x00, 0, 1);
 
+/* reg_mogcr_sid
+ * Sample ingress discards:
+ * 0 - Ingress discards are not sampled
+ * 1 - Ingress discards are sampled
+ * Access: RW
+ */
+MLXSW_ITEM32(reg, mogcr, sid, 0x08, 0, 1);
+
 /* reg_mogcr_mirroring_pid_base
  * Base policer id for mirroring policers.
  * Must have an even value (e.g. 1000, not 1001).
