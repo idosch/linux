@@ -2780,6 +2780,19 @@ static void mlxsw_sp_lag_fini(struct mlxsw_sp *mlxsw_sp)
 	kfree(mlxsw_sp->lags);
 }
 
+static int mlxsw_sp_sample_init(struct mlxsw_sp *mlxsw_sp)
+{
+	char mogcr_pl[MLXSW_REG_MOGCR_LEN];
+	int err;
+
+	err = mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(mogcr), mogcr_pl);
+	if (err)
+		return err;
+
+	mlxsw_reg_mogcr_sid_set(mogcr_pl, true);
+	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(mogcr), mogcr_pl);
+}
+
 static int mlxsw_sp_basic_trap_groups_set(struct mlxsw_core *mlxsw_core)
 {
 	char htgt_pl[MLXSW_REG_HTGT_LEN];
@@ -2923,6 +2936,12 @@ static int mlxsw_sp_init(struct mlxsw_core *mlxsw_core,
 		goto err_nve_init;
 	}
 
+	err = mlxsw_sp_sample_init(mlxsw_sp);
+	if (err) {
+		dev_err(mlxsw_sp->bus_info->dev, "Failed to initialize sampling\n");
+		goto err_sample_init;
+	}
+
 	err = mlxsw_sp_acl_init(mlxsw_sp);
 	if (err) {
 		dev_err(mlxsw_sp->bus_info->dev, "Failed to initialize ACL\n");
@@ -3007,6 +3026,7 @@ err_ptp_clock_init:
 err_router_init:
 	mlxsw_sp_acl_fini(mlxsw_sp);
 err_acl_init:
+err_sample_init:
 	mlxsw_sp_nve_fini(mlxsw_sp);
 err_nve_init:
 	mlxsw_sp_afa_fini(mlxsw_sp);
