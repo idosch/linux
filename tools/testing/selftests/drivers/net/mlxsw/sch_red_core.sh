@@ -631,3 +631,31 @@ do_drop_mirror_test()
 
 	tc filter del dev $h2 ingress pref 1 handle 101 flower
 }
+
+qevent_rule_install_trap()
+{
+	tc filter add block 10 pref 1234 handle 102 matchall skip_sw \
+	   action trap hw_stats disabled
+}
+
+qevent_rule_uninstall_trap()
+{
+	tc filter del block 10 pref 1234 handle 102 matchall
+}
+
+qevent_counter_fetch_trap()
+{
+	local trap_name=$1; shift
+
+	devlink_trap_rx_packets_get "$trap_name"
+}
+
+do_drop_trap_test()
+{
+	local vlan=$1; shift
+	local limit=$1; shift
+	local trap_name=$1; shift
+
+	do_drop_test "$vlan" "$limit" "$trap_name" trap \
+		     "qevent_counter_fetch_trap $trap_name"
+}
