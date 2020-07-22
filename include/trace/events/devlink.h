@@ -171,6 +171,15 @@ TRACE_EVENT(devlink_health_reporter_state_update,
 		  __entry->new_state)
 );
 
+/*
+ * Tracepoint for devlink packet trap:
+ */
+DECLARE_TRACE(devlink_trap_report,
+	      TP_PROTO(struct sk_buff *skb,
+		       const struct devlink_trap_metadata *metadata),
+	      TP_ARGS(skb, metadata)
+);
+
 #endif /* _TRACE_DEVLINK_H */
 
 /* This part must be outside protection */
