@@ -84,6 +84,7 @@ EXPORT_SYMBOL(devlink_dpipe_header_ipv6);
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwmsg);
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwerr);
+EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_trap_report);
 
 static const struct nla_policy devlink_function_nl_policy[DEVLINK_PORT_FUNCTION_ATTR_MAX + 1] = {
 	[DEVLINK_PORT_FUNCTION_ATTR_HW_ADDR] = { .type = NLA_BINARY },
@@ -9173,6 +9174,19 @@ void devlink_trap_report(struct devlink *devlink, struct sk_buff *skb,
 	devlink_trap_report_metadata_fill(&hw_metadata, trap_item,
 					  in_devlink_port, fa_cookie);
 	net_dm_hw_report(skb, &hw_metadata);
+
+	if (trace_devlink_trap_report_enabled()) {
+		struct net_device *input_dev = NULL;
+
+		spin_lock(&in_devlink_port->type_lock);
+		if (in_devlink_port->type == DEVLINK_PORT_TYPE_ETH)
+			input_dev = in_devlink_port->type_dev;
+		spin_unlock(&in_devlink_port->type_lock);
+
+		trace_devlink_trap_report(skb, trap_item->trap->name,
+					  trap_item->group_item->group->name,
+					  input_dev, fa_cookie);
+	}
 }
 EXPORT_SYMBOL_GPL(devlink_trap_report);
 
