@@ -346,7 +346,10 @@ mlxsw_sp_trap_policer_items_arr[] = {
 	},
 	{
 		.policer = MLXSW_SP_TRAP_POLICER(19, 10240, 4096),
-	}
+	},
+	{
+		.policer = MLXSW_SP_TRAP_POLICER(20, 1024, 512),
+	},
 };
 
 static const struct mlxsw_sp_trap_group_item mlxsw_sp_trap_group_items_arr[] = {
@@ -439,6 +442,11 @@ static const struct mlxsw_sp_trap_group_item mlxsw_sp_trap_group_items_arr[] = {
 		.group = DEVLINK_TRAP_GROUP_GENERIC(LOCAL_DELIVERY, 14),
 		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_IP2ME,
 		.priority = 2,
+	},
+	{
+		.group = DEVLINK_TRAP_GROUP_GENERIC(EXTERNAL_DELIVERY, 20),
+		.hw_group_id = MLXSW_REG_HTGT_TRAP_GROUP_SP_EXTERNAL_ROUTE,
+		.priority = 1,
 	},
 	{
 		.group = DEVLINK_TRAP_GROUP_GENERIC(IPV6, 15),
@@ -901,11 +909,11 @@ static const struct mlxsw_sp_trap_item mlxsw_sp_trap_items_arr[] = {
 		},
 	},
 	{
-		.trap = MLXSW_SP_TRAP_CONTROL(EXTERNAL_ROUTE, LOCAL_DELIVERY,
+		.trap = MLXSW_SP_TRAP_CONTROL(EXTERNAL_ROUTE, EXTERNAL_DELIVERY,
 					      TRAP),
 		.listeners_arr = {
-			MLXSW_SP_RXL_MARK(RTR_INGRESS0, IP2ME, TRAP_TO_CPU,
-					  false),
+			MLXSW_SP_RXL_MARK(RTR_INGRESS0, EXTERNAL_ROUTE,
+					  TRAP_TO_CPU, false),
 		},
 	},
 	{
