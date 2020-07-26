@@ -442,6 +442,9 @@ net_dm_hw_trap_summary_probe(void *ignore, struct sk_buff *skb,
 	unsigned long flags;
 	int i;
 
+	if (metadata->trap_type == DEVLINK_TRAP_TYPE_CONTROL)
+		return;
+
 	hw_data = this_cpu_ptr(&dm_hw_cpu_data);
 	spin_lock_irqsave(&hw_data->lock, flags);
 	hw_entries = hw_data->hw_entries;
@@ -933,6 +936,9 @@ net_dm_hw_trap_packet_probe(void *ignore, struct sk_buff *skb,
 	struct per_cpu_dm_data *hw_data;
 	struct sk_buff *nskb;
 	unsigned long flags;
+
+	if (metadata->trap_type == DEVLINK_TRAP_TYPE_CONTROL)
+		return;
 
 	if (!skb_mac_header_was_set(skb))
 		return;
