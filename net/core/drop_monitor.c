@@ -108,13 +108,6 @@ static enum net_dm_alert_mode net_dm_alert_mode = NET_DM_ALERT_MODE_SUMMARY;
 static u32 net_dm_trunc_len;
 static u32 net_dm_queue_len = 1000;
 
-struct net_dm_hw_metadata {
-	const char *trap_group_name;
-	const char *trap_name;
-	struct net_device *input_dev;
-	const struct flow_action_cookie *fa_cookie;
-};
-
 struct net_dm_alert_ops {
 	void (*kfree_skb_probe)(void *ignore, struct sk_buff *skb,
 				void *location);
@@ -128,7 +121,7 @@ struct net_dm_alert_ops {
 
 struct net_dm_skb_cb {
 	union {
-		struct net_dm_hw_metadata *hw_metadata;
+		struct devlink_trap_metadata *hw_metadata;
 		void *pc;
 	};
 };
@@ -713,7 +706,7 @@ static void net_dm_packet_work(struct work_struct *work)
 }
 
 static size_t
-net_dm_flow_action_cookie_size(const struct net_dm_hw_metadata *hw_metadata)
+net_dm_flow_action_cookie_size(const struct devlink_trap_metadata *hw_metadata)
 {
 	return hw_metadata->fa_cookie ?
 	       nla_total_size(hw_metadata->fa_cookie->cookie_len) : 0;
@@ -721,7 +714,7 @@ net_dm_flow_action_cookie_size(const struct net_dm_hw_metadata *hw_metadata)
 
 static size_t
 net_dm_hw_packet_report_size(size_t payload_len,
-			     const struct net_dm_hw_metadata *hw_metadata)
+			     const struct devlink_trap_metadata *hw_metadata)
 {
 	size_t size;
 
@@ -751,7 +744,7 @@ net_dm_hw_packet_report_size(size_t payload_len,
 static int net_dm_hw_packet_report_fill(struct sk_buff *msg,
 					struct sk_buff *skb, size_t payload_len)
 {
-	struct net_dm_hw_metadata *hw_metadata;
+	struct devlink_trap_metadata *hw_metadata;
 	struct nlattr *attr;
 	void *hdr;
 
@@ -818,11 +811,11 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static struct net_dm_hw_metadata *
+static struct devlink_trap_metadata *
 net_dm_hw_metadata_copy(const struct devlink_trap_metadata *metadata)
 {
 	const struct flow_action_cookie *fa_cookie;
-	struct net_dm_hw_metadata *hw_metadata;
+	struct devlink_trap_metadata *hw_metadata;
 	const char *trap_group_name;
 	const char *trap_name;
 
@@ -867,7 +860,7 @@ free_hw_metadata:
 }
 
 static void
-net_dm_hw_metadata_free(const struct net_dm_hw_metadata *hw_metadata)
+net_dm_hw_metadata_free(const struct devlink_trap_metadata *hw_metadata)
 {
 	if (hw_metadata->input_dev)
 		dev_put(hw_metadata->input_dev);
@@ -879,7 +872,7 @@ net_dm_hw_metadata_free(const struct net_dm_hw_metadata *hw_metadata)
 
 static void net_dm_hw_packet_report(struct sk_buff *skb)
 {
-	struct net_dm_hw_metadata *hw_metadata;
+	struct devlink_trap_metadata *hw_metadata;
 	struct sk_buff *msg;
 	size_t payload_len;
 	int rc;
@@ -935,7 +928,7 @@ static void
 net_dm_hw_trap_packet_probe(void *ignore, struct sk_buff *skb,
 			    const struct devlink_trap_metadata *metadata)
 {
-	struct net_dm_hw_metadata *n_hw_metadata;
+	struct devlink_trap_metadata *n_hw_metadata;
 	ktime_t tstamp = ktime_get_real();
 	struct per_cpu_dm_data *hw_data;
 	struct sk_buff *nskb;
@@ -1078,7 +1071,7 @@ static void net_dm_hw_monitor_stop(struct netlink_ext_ack *extack)
 		del_timer_sync(&hw_data->send_timer);
 		cancel_work_sync(&hw_data->dm_alert_work);
 		while ((skb = __skb_dequeue(&hw_data->drop_queue))) {
-			struct net_dm_hw_metadata *hw_metadata;
+			struct devlink_trap_metadata *hw_metadata;
 
 			hw_metadata = NET_DM_SKB_CB(skb)->hw_metadata;
 			net_dm_hw_metadata_free(hw_metadata);
