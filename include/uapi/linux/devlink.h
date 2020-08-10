@@ -125,6 +125,7 @@ enum devlink_command {
 	DEVLINK_CMD_METRIC_GET,		/* can dump */
 	DEVLINK_CMD_METRIC_NEW,
 	DEVLINK_CMD_METRIC_DEL,
+	DEVLINK_CMD_METRIC_SET,
 
 	/* add new commands above here */
 	__DEVLINK_CMD_MAX,
@@ -474,6 +475,7 @@ enum devlink_attr {
 	/* enum devlink_metric_type */
 	DEVLINK_ATTR_METRIC_TYPE,		/* u8 */
 	DEVLINK_ATTR_METRIC_COUNTER_VALUE,	/* u64 */
+	DEVLINK_ATTR_METRIC_GROUP,		/* u32 */
 
 	/* add new attributes above here, update the policy in devlink.c */
 

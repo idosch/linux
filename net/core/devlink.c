@@ -7000,6 +7000,7 @@ static int devlink_nl_cmd_trap_policer_set_doit(struct sk_buff *skb,
  * @ops: Metric operations.
  * @list: Member of 'metric_list'
  * @type: Metric type.
+ * @group: Group number. '0' is the default group number.
  * @priv: Metric private information.
  */
 struct devlink_metric {
@@ -7007,6 +7008,7 @@ struct devlink_metric {
 	const struct devlink_metric_ops *ops;
 	struct list_head list;
 	enum devlink_metric_type type;
+	u32 group;
 	void *priv;
 };
 
@@ -7074,6 +7076,9 @@ devlink_nl_metric_fill(struct sk_buff *msg, struct devlink *devlink,
 
 	if (metric->type == DEVLINK_METRIC_TYPE_COUNTER &&
 	    devlink_nl_metric_counter_fill(msg, metric))
+		goto nla_put_failure;
+
+	if (nla_put_u32(msg, DEVLINK_ATTR_METRIC_GROUP, metric->group))
 		goto nla_put_failure;
 
 	genlmsg_end(msg, hdr);
@@ -7159,6 +7164,36 @@ out:
 	return msg->len;
 }
 
+static void devlink_metric_group_set(struct devlink_metric *metric,
+				     struct genl_info *info)
+{
+	if (!info->attrs[DEVLINK_ATTR_METRIC_GROUP])
+		return;
+
+	metric->group = nla_get_u32(info->attrs[DEVLINK_ATTR_METRIC_GROUP]);
+}
+
+static int devlink_nl_cmd_metric_set_doit(struct sk_buff *skb,
+					  struct genl_info *info)
+{
+	struct netlink_ext_ack *extack = info->extack;
+	struct devlink *devlink = info->user_ptr[0];
+	struct devlink_metric *metric;
+
+	if (list_empty(&devlink->metric_list))
+		return -EOPNOTSUPP;
+
+	metric = devlink_metric_get_from_info(devlink, info);
+	if (!metric) {
+		NL_SET_ERR_MSG_MOD(extack, "Device did not register this metric");
+		return -ENOENT;
+	}
+
+	devlink_metric_group_set(metric, info);
+
+	return 0;
+}
+
 static const struct nla_policy devlink_nl_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_UNSPEC] = { .strict_start_type =
 		DEVLINK_ATTR_TRAP_POLICER_ID },
@@ -7206,6 +7241,7 @@ static const struct nla_policy devlink_nl_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_PORT_FUNCTION] = { .type = NLA_NESTED },
 	[DEVLINK_ATTR_METRIC_NAME] = { .type = NLA_NUL_STRING },
 	[DEVLINK_ATTR_METRIC_TYPE] = { .type = NLA_U8 },
+	[DEVLINK_ATTR_METRIC_GROUP] = { .type = NLA_U32 },
 };
 
 static const struct genl_ops devlink_nl_ops[] = {
@@ -7519,6 +7555,11 @@ static const struct genl_ops devlink_nl_ops[] = {
 		.doit = devlink_nl_cmd_metric_get_doit,
 		.dumpit = devlink_nl_cmd_metric_get_dumpit,
 		/* can be retrieved by unprivileged users */
+	},
+	{
+		.cmd = DEVLINK_CMD_METRIC_SET,
+		.doit = devlink_nl_cmd_metric_set_doit,
+		.flags = GENL_ADMIN_PERM,
 	},
 };
 
@@ -9734,6 +9775,7 @@ devlink_metric_counter_create(struct devlink *devlink, const char *name,
 
 	metric->ops = ops;
 	metric->type = DEVLINK_METRIC_TYPE_COUNTER;
+	metric->group = 0;
 	metric->priv = priv;
 
 	list_add_tail(&metric->list, &devlink->metric_list);
