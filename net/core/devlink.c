@@ -7128,13 +7128,21 @@ err_metric_fill:
 static int devlink_nl_cmd_metric_get_dumpit(struct sk_buff *msg,
 					    struct netlink_callback *cb)
 {
+	const struct genl_dumpit_info *info = genl_dumpit_info(cb);
 	enum devlink_command cmd = DEVLINK_CMD_METRIC_NEW;
 	u32 portid = NETLINK_CB(cb->skb).portid;
 	struct devlink_metric *metric;
 	struct devlink *devlink;
 	int start = cb->args[0];
+	int flags = NLM_F_MULTI;
+	u32 group = 0;
 	int idx = 0;
 	int err;
+
+	if (info->attrs[DEVLINK_ATTR_METRIC_GROUP]) {
+		group = nla_get_u32(info->attrs[DEVLINK_ATTR_METRIC_GROUP]);
+		flags |= NLM_F_DUMP_FILTERED;
+	}
 
 	mutex_lock(&devlink_mutex);
 	list_for_each_entry(devlink, &devlink_list, list) {
@@ -7146,9 +7154,13 @@ static int devlink_nl_cmd_metric_get_dumpit(struct sk_buff *msg,
 				idx++;
 				continue;
 			}
+			if (group && metric->group != group) {
+				idx++;
+				continue;
+			}
 			err = devlink_nl_metric_fill(msg, devlink, metric, cmd,
 						     portid, cb->nlh->nlmsg_seq,
-						     NLM_F_MULTI);
+						     flags);
 			if (err) {
 				mutex_unlock(&devlink->lock);
 				goto out;
