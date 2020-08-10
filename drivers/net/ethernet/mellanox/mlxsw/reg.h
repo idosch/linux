@@ -10064,6 +10064,56 @@ static inline void mlxsw_reg_tngcr_pack(char *payload,
 	mlxsw_reg_tngcr_nve_group_size_flood_set(payload, 1);
 }
 
+/* TNCR - Tunneling NVE Counters Register
+ * --------------------------------------
+ * The TNCR register exposes counters of NVE encapsulation and decapsulation.
+ *
+ * Note: Not supported by Spectrum-2 onwards.
+ */
+#define MLXSW_REG_TNCR_ID 0xA002
+#define MLXSW_REG_TNCR_LEN 0x30
+
+MLXSW_REG_DEFINE(tncr, MLXSW_REG_TNCR_ID, MLXSW_REG_TNCR_LEN);
+
+/* reg_tncr_clear_counters
+ * Clear counters.
+ * Access: OP
+ */
+MLXSW_ITEM32(reg, tncr, clear_counters, 0x00, 31, 1);
+
+/* reg_tncr_count_encap
+ * Count number of packets which did encapsulation to an NVE tunnel.
+ * Access: RO
+ *
+ * Note: Multicast packets which are encapsulated multiple times are counted
+ * multiple times.
+ */
+MLXSW_ITEM64(reg, tncr, count_encap, 0x10, 0, 64);
+
+/* reg_tncr_count_decap
+ * Count number of packets which did decapsulation from an NVE tunnel.
+ * Access: RO
+ */
+MLXSW_ITEM64(reg, tncr, count_decap, 0x18, 0, 64);
+
+/* reg_tncr_count_decap_errors
+ * Count number of packets which had decapsulation errors from an NVE tunnel.
+ * Access: RO
+ */
+MLXSW_ITEM64(reg, tncr, count_decap_errors, 0x20, 0, 64);
+
+/* reg_tncr_count_decap_discards
+ * Count number of packets which had decapsulation discards from an NVE tunnel.
+ * Access: RO
+ */
+MLXSW_ITEM64(reg, tncr, count_decap_discards, 0x28, 0, 64);
+
+static inline void mlxsw_reg_tncr_pack(char *payload, bool clear_counters)
+{
+	MLXSW_REG_ZERO(tncr, payload);
+	mlxsw_reg_tncr_clear_counters_set(payload, clear_counters);
+}
+
 /* TNUMT - Tunneling NVE Underlay Multicast Table Register
  * -------------------------------------------------------
  * The TNUMT register is for building the underlay MC table. It is used
@@ -10995,6 +11045,7 @@ static const struct mlxsw_reg_info *mlxsw_reg_infos[] = {
 	MLXSW_REG(mtptpt),
 	MLXSW_REG(mgpir),
 	MLXSW_REG(tngcr),
+	MLXSW_REG(tncr),
 	MLXSW_REG(tnumt),
 	MLXSW_REG(tnqcr),
 	MLXSW_REG(tnqdr),
