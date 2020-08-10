@@ -171,6 +171,7 @@ struct nsim_dev {
 	struct nsim_bus_dev *nsim_bus_dev;
 	struct nsim_fib_data *fib_data;
 	struct nsim_trap_data *trap_data;
+	struct nsim_metric_data *metric_data;
 	struct dentry *ddir;
 	struct dentry *ports_ddir;
 	struct dentry *take_snapshot;
