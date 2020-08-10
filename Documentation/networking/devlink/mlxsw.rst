@@ -79,3 +79,39 @@ Driver-specific Traps
        routed through a disabled router interface (RIF). This can happen during
        RIF dismantle, when the RIF is first disabled before being removed
        completely
+
+Metrics
+=======
+
+.. list-table:: List of metrics registered by ``mlxsw``
+   :widths: 5 5 20 70
+
+   * - Name
+     - Type
+     - Supported platforms
+     - Description
+   * - ``nve_vxlan_encap``
+     - ``counter``
+     - Spectrum-1 only
+     - Counts number of packets that were VXLAN encapsulated by the device. A
+       packet sent to multiple VTEPs is counted multiple times
+   * - ``nve_vxlan_decap``
+     - ``counter``
+     - Spectrum-1 only
+     - Counts number of VXLAN packets that were decapsulated (successfully or
+       otherwise) by the device
+   * - ``nve_vxlan_decap_errors``
+     - ``counter``
+     - Spectrum-1 only
+     - Counts number of VXLAN packets that encountered decapsulation errors.
+       This includes overlay packets with a VLAN tag, ECN mismatch between
+       overlay and underlay, multicast overlay source MAC, overlay source MAC
+       equals overlay destination MAC and packets too short to decapsulate
+   * - ``nve_vxlan_decap_discards``
+     - ``counter``
+     - All
+     - Counts number of VXLAN packets that were discarded during decapsulation.
+       In Spectrum-1 this includes packets that had to be VXLAN decapsulated
+       when VXLAN decapsulation is disabled and fragmented overlay packets. In
+       Spectrum-2 this includes ``nve_vxlan_decap_errors`` errors and a missing
+       mapping between VNI and filtering identifier (FID)

@@ -4,6 +4,7 @@
 #include <linux/netdevice.h>
 #include <linux/netlink.h>
 #include <linux/random.h>
+#include <net/devlink.h>
 #include <net/vxlan.h>
 
 #include "reg.h"
@@ -220,6 +221,173 @@ static int mlxsw_sp1_nve_vxlan_rtdp_set(struct mlxsw_sp *mlxsw_sp,
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(rtdp), rtdp_pl);
 }
 
+static int
+mlxsw_sp1_nve_vxlan_common_counter_get(struct devlink_metric *metric,
+				       char *tncr_pl)
+{
+	struct mlxsw_sp *mlxsw_sp = devlink_metric_priv(metric);
+
+	mlxsw_reg_tncr_pack(tncr_pl, false);
+
+	return mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(tncr), tncr_pl);
+}
+
+static int
+mlxsw_sp1_nve_vxlan_encap_counter_get(struct devlink_metric *metric,
+				      u64 *p_val)
+{
+	char tncr_pl[MLXSW_REG_TNCR_LEN];
+	int err;
+
+	err = mlxsw_sp1_nve_vxlan_common_counter_get(metric, tncr_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr_count_encap_get(tncr_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp1_nve_vxlan_encap_ops = {
+	.counter_get = mlxsw_sp1_nve_vxlan_encap_counter_get,
+};
+
+static int
+mlxsw_sp1_nve_vxlan_decap_counter_get(struct devlink_metric *metric,
+				      u64 *p_val)
+{
+	char tncr_pl[MLXSW_REG_TNCR_LEN];
+	int err;
+
+	err = mlxsw_sp1_nve_vxlan_common_counter_get(metric, tncr_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr_count_decap_get(tncr_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp1_nve_vxlan_decap_ops = {
+	.counter_get = mlxsw_sp1_nve_vxlan_decap_counter_get,
+};
+
+static int
+mlxsw_sp1_nve_vxlan_decap_errors_counter_get(struct devlink_metric *metric,
+					     u64 *p_val)
+{
+	char tncr_pl[MLXSW_REG_TNCR_LEN];
+	int err;
+
+	err = mlxsw_sp1_nve_vxlan_common_counter_get(metric, tncr_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr_count_decap_errors_get(tncr_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp1_nve_vxlan_decap_errors_ops = {
+	.counter_get = mlxsw_sp1_nve_vxlan_decap_errors_counter_get,
+};
+
+static int
+mlxsw_sp1_nve_vxlan_decap_discards_counter_get(struct devlink_metric *metric,
+					       u64 *p_val)
+{
+	char tncr_pl[MLXSW_REG_TNCR_LEN];
+	int err;
+
+	err = mlxsw_sp1_nve_vxlan_common_counter_get(metric, tncr_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr_count_decap_discards_get(tncr_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp1_nve_vxlan_decap_discards_ops = {
+	.counter_get = mlxsw_sp1_nve_vxlan_decap_discards_counter_get,
+};
+
+static int mlxsw_sp1_nve_vxlan_counters_clear(struct mlxsw_sp *mlxsw_sp)
+{
+	char tncr_pl[MLXSW_REG_TNCR_LEN];
+
+	mlxsw_reg_tncr_pack(tncr_pl, true);
+
+	/* Clear operation is implemented on query. */
+	return mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(tncr), tncr_pl);
+}
+
+static int mlxsw_sp1_nve_vxlan_metrics_init(struct mlxsw_sp *mlxsw_sp)
+{
+	struct mlxsw_sp_nve_metrics *metrics = &mlxsw_sp->nve->metrics;
+	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
+	int err;
+
+	err = mlxsw_sp1_nve_vxlan_counters_clear(mlxsw_sp);
+	if (err)
+		return err;
+
+	metrics->counter_encap =
+		devlink_metric_counter_create(devlink, "nve_vxlan_encap",
+					      &mlxsw_sp1_nve_vxlan_encap_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_encap))
+		return PTR_ERR(metrics->counter_encap);
+
+	metrics->counter_decap =
+		devlink_metric_counter_create(devlink, "nve_vxlan_decap",
+					      &mlxsw_sp1_nve_vxlan_decap_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_decap)) {
+		err = PTR_ERR(metrics->counter_decap);
+		goto err_counter_decap;
+	}
+
+	metrics->counter_decap_errors =
+		devlink_metric_counter_create(devlink, "nve_vxlan_decap_errors",
+					      &mlxsw_sp1_nve_vxlan_decap_errors_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_decap_errors)) {
+		err = PTR_ERR(metrics->counter_decap_errors);
+		goto err_counter_decap_errors;
+	}
+
+	metrics->counter_decap_discards =
+		devlink_metric_counter_create(devlink, "nve_vxlan_decap_discards",
+					      &mlxsw_sp1_nve_vxlan_decap_discards_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_decap_discards)) {
+		err = PTR_ERR(metrics->counter_decap_discards);
+		goto err_counter_decap_discards;
+	}
+
+	return 0;
+
+err_counter_decap_discards:
+	devlink_metric_destroy(devlink, metrics->counter_decap_errors);
+err_counter_decap_errors:
+	devlink_metric_destroy(devlink, metrics->counter_decap);
+err_counter_decap:
+	devlink_metric_destroy(devlink, metrics->counter_encap);
+	return err;
+}
+
+static void mlxsw_sp1_nve_vxlan_metrics_fini(struct mlxsw_sp *mlxsw_sp)
+{
+	struct mlxsw_sp_nve_metrics *metrics = &mlxsw_sp->nve->metrics;
+	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
+
+	devlink_metric_destroy(devlink, metrics->counter_decap_discards);
+	devlink_metric_destroy(devlink, metrics->counter_decap_errors);
+	devlink_metric_destroy(devlink, metrics->counter_decap);
+	devlink_metric_destroy(devlink, metrics->counter_encap);
+}
+
 static int mlxsw_sp1_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 				    const struct mlxsw_sp_nve_config *config)
 {
@@ -238,6 +406,10 @@ static int mlxsw_sp1_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 	if (err)
 		goto err_rtdp_set;
 
+	err = mlxsw_sp1_nve_vxlan_metrics_init(mlxsw_sp);
+	if (err)
+		goto err_metrics_init;
+
 	err = mlxsw_sp_router_nve_promote_decap(mlxsw_sp, config->ul_tb_id,
 						config->ul_proto,
 						&config->ul_sip,
@@ -248,6 +420,8 @@ static int mlxsw_sp1_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 	return 0;
 
 err_promote_decap:
+	mlxsw_sp1_nve_vxlan_metrics_fini(mlxsw_sp);
+err_metrics_init:
 err_rtdp_set:
 	mlxsw_sp1_nve_vxlan_config_clear(mlxsw_sp);
 err_config_set:
@@ -262,6 +436,7 @@ static void mlxsw_sp1_nve_vxlan_fini(struct mlxsw_sp_nve *nve)
 
 	mlxsw_sp_router_nve_demote_decap(mlxsw_sp, config->ul_tb_id,
 					 config->ul_proto, &config->ul_sip);
+	mlxsw_sp1_nve_vxlan_metrics_fini(mlxsw_sp);
 	mlxsw_sp1_nve_vxlan_config_clear(mlxsw_sp);
 	__mlxsw_sp_nve_inc_parsing_depth_put(mlxsw_sp, 0);
 }
@@ -360,6 +535,109 @@ static int mlxsw_sp2_nve_vxlan_rtdp_set(struct mlxsw_sp *mlxsw_sp,
 	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(rtdp), rtdp_pl);
 }
 
+static int
+mlxsw_sp2_nve_vxlan_common_counter_get(struct devlink_metric *metric,
+				       char *tncr2_pl)
+{
+	struct mlxsw_sp *mlxsw_sp = devlink_metric_priv(metric);
+
+	mlxsw_reg_tncr2_pack(tncr2_pl, MLXSW_REG_TNCR2_TUNNEL_PORT_NVE, false);
+
+	return mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(tncr2), tncr2_pl);
+}
+
+static int
+mlxsw_sp2_nve_vxlan_decap_discards_counter_get(struct devlink_metric *metric,
+					       u64 *p_val)
+{
+	char tncr2_pl[MLXSW_REG_TNCR2_LEN];
+	int err;
+
+	err = mlxsw_sp2_nve_vxlan_common_counter_get(metric, tncr2_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr2_count_decap_discards_get(tncr2_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp2_nve_vxlan_decap_discards_ops = {
+	.counter_get = mlxsw_sp2_nve_vxlan_decap_discards_counter_get,
+};
+
+static int
+mlxsw_sp2_nve_vxlan_encap_discards_counter_get(struct devlink_metric *metric,
+					       u64 *p_val)
+{
+	char tncr2_pl[MLXSW_REG_TNCR2_LEN];
+	int err;
+
+	err = mlxsw_sp2_nve_vxlan_common_counter_get(metric, tncr2_pl);
+	if (err)
+		return err;
+
+	*p_val = mlxsw_reg_tncr2_count_encap_discards_get(tncr2_pl);
+
+	return 0;
+}
+
+static const struct devlink_metric_ops mlxsw_sp2_nve_vxlan_encap_discards_ops = {
+	.counter_get = mlxsw_sp2_nve_vxlan_encap_discards_counter_get,
+};
+
+static int mlxsw_sp2_nve_vxlan_counters_clear(struct mlxsw_sp *mlxsw_sp)
+{
+	char tncr2_pl[MLXSW_REG_TNCR2_LEN];
+
+	mlxsw_reg_tncr2_pack(tncr2_pl, MLXSW_REG_TNCR2_TUNNEL_PORT_NVE, true);
+
+	/* Clear operation is implemented on query. */
+	return mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(tncr2), tncr2_pl);
+}
+
+static int mlxsw_sp2_nve_vxlan_metrics_init(struct mlxsw_sp *mlxsw_sp)
+{
+	struct mlxsw_sp_nve_metrics *metrics = &mlxsw_sp->nve->metrics;
+	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
+	int err;
+
+	err = mlxsw_sp2_nve_vxlan_counters_clear(mlxsw_sp);
+	if (err)
+		return err;
+
+	metrics->counter_decap_discards =
+		devlink_metric_counter_create(devlink, "nve_vxlan_decap_discards",
+					      &mlxsw_sp2_nve_vxlan_decap_discards_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_decap_discards))
+		return PTR_ERR(metrics->counter_decap_discards);
+
+	metrics->counter_encap_discards =
+		devlink_metric_counter_create(devlink, "nve_vxlan_encap_discards",
+					      &mlxsw_sp2_nve_vxlan_encap_discards_ops,
+					      mlxsw_sp);
+	if (IS_ERR(metrics->counter_encap_discards)) {
+		err = PTR_ERR(metrics->counter_encap_discards);
+		goto err_counter_encap_discards;
+	}
+
+	return 0;
+
+err_counter_encap_discards:
+	devlink_metric_destroy(devlink, metrics->counter_decap_discards);
+	return err;
+}
+
+static void mlxsw_sp2_nve_vxlan_metrics_fini(struct mlxsw_sp *mlxsw_sp)
+{
+	struct mlxsw_sp_nve_metrics *metrics = &mlxsw_sp->nve->metrics;
+	struct devlink *devlink = priv_to_devlink(mlxsw_sp->core);
+
+	devlink_metric_destroy(devlink, metrics->counter_encap_discards);
+	devlink_metric_destroy(devlink, metrics->counter_decap_discards);
+}
+
 static int mlxsw_sp2_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 				    const struct mlxsw_sp_nve_config *config)
 {
@@ -379,6 +657,10 @@ static int mlxsw_sp2_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 	if (err)
 		goto err_rtdp_set;
 
+	err = mlxsw_sp2_nve_vxlan_metrics_init(mlxsw_sp);
+	if (err)
+		goto err_metrics_init;
+
 	err = mlxsw_sp_router_nve_promote_decap(mlxsw_sp, config->ul_tb_id,
 						config->ul_proto,
 						&config->ul_sip,
@@ -389,6 +671,8 @@ static int mlxsw_sp2_nve_vxlan_init(struct mlxsw_sp_nve *nve,
 	return 0;
 
 err_promote_decap:
+	mlxsw_sp2_nve_vxlan_metrics_fini(mlxsw_sp);
+err_metrics_init:
 err_rtdp_set:
 	mlxsw_sp2_nve_vxlan_config_clear(mlxsw_sp);
 err_config_set:
@@ -403,6 +687,7 @@ static void mlxsw_sp2_nve_vxlan_fini(struct mlxsw_sp_nve *nve)
 
 	mlxsw_sp_router_nve_demote_decap(mlxsw_sp, config->ul_tb_id,
 					 config->ul_proto, &config->ul_sip);
+	mlxsw_sp2_nve_vxlan_metrics_fini(mlxsw_sp);
 	mlxsw_sp2_nve_vxlan_config_clear(mlxsw_sp);
 	__mlxsw_sp_nve_inc_parsing_depth_put(mlxsw_sp, 0);
 }
