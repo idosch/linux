@@ -692,6 +692,81 @@ static void nsim_dev_traps_exit(struct devlink *devlink)
 	kfree(nsim_dev->trap_data);
 }
 
+struct nsim_metric_data {
+	struct devlink_metric *dummy_counter;
+	struct dentry *ddir;
+	u64 dummy_counter_value;
+	bool fail_counter_get;
+};
+
+static int nsim_dev_dummy_counter_get(struct devlink_metric *metric, u64 *p_val)
+{
+	struct nsim_dev *nsim_dev = devlink_metric_priv(metric);
+	u64 *cnt;
+
+	if (nsim_dev->metric_data->fail_counter_get)
+		return -EINVAL;
+
+	cnt = &nsim_dev->metric_data->dummy_counter_value;
+	*p_val = (*cnt)++;
+
+	return 0;
+}
+
+static const struct devlink_metric_ops nsim_dev_dummy_counter_ops = {
+	.counter_get = nsim_dev_dummy_counter_get,
+};
+
+static int nsim_dev_metric_init(struct nsim_dev *nsim_dev)
+{
+	struct devlink *devlink = priv_to_devlink(nsim_dev);
+	struct nsim_metric_data *nsim_metric_data;
+	struct devlink_metric *dummy_counter;
+	int err;
+
+	nsim_metric_data = kzalloc(sizeof(*nsim_metric_data), GFP_KERNEL);
+	if (!nsim_metric_data)
+		return -ENOMEM;
+	nsim_dev->metric_data = nsim_metric_data;
+
+	dummy_counter = devlink_metric_counter_create(devlink, "dummy_counter",
+						      &nsim_dev_dummy_counter_ops,
+						      nsim_dev);
+	if (IS_ERR(dummy_counter)) {
+		err = PTR_ERR(dummy_counter);
+		goto err_free_metric_data;
+	}
+	nsim_metric_data->dummy_counter = dummy_counter;
+
+	nsim_metric_data->ddir = debugfs_create_dir("metric", nsim_dev->ddir);
+	if (IS_ERR(nsim_metric_data->ddir)) {
+		err = PTR_ERR(nsim_metric_data->ddir);
+		goto err_dummy_counter_destroy;
+	}
+
+	nsim_metric_data->fail_counter_get = false;
+	debugfs_create_bool("fail_counter_get", 0600, nsim_metric_data->ddir,
+			    &nsim_metric_data->fail_counter_get);
+
+	return 0;
+
+err_dummy_counter_destroy:
+	devlink_metric_destroy(devlink, dummy_counter);
+err_free_metric_data:
+	kfree(nsim_metric_data);
+	return err;
+}
+
+static void nsim_dev_metric_exit(struct nsim_dev *nsim_dev)
+{
+	struct nsim_metric_data *nsim_metric_data = nsim_dev->metric_data;
+	struct devlink *devlink = priv_to_devlink(nsim_dev);
+
+	debugfs_remove_recursive(nsim_metric_data->ddir);
+	devlink_metric_destroy(devlink, nsim_metric_data->dummy_counter);
+	kfree(nsim_metric_data);
+}
+
 static int nsim_dev_reload_create(struct nsim_dev *nsim_dev,
 				  struct netlink_ext_ack *extack);
 static void nsim_dev_reload_destroy(struct nsim_dev *nsim_dev);
@@ -1008,9 +1083,13 @@ static int nsim_dev_reload_create(struct nsim_dev *nsim_dev,
 	if (err)
 		goto err_traps_exit;
 
-	err = nsim_dev_port_add_all(nsim_dev, nsim_bus_dev->port_count);
+	err = nsim_dev_metric_init(nsim_dev);
 	if (err)
 		goto err_health_exit;
+
+	err = nsim_dev_port_add_all(nsim_dev, nsim_bus_dev->port_count);
+	if (err)
+		goto err_metric_exit;
 
 	nsim_dev->take_snapshot = debugfs_create_file("take_snapshot",
 						      0200,
@@ -1019,6 +1098,8 @@ static int nsim_dev_reload_create(struct nsim_dev *nsim_dev,
 						&nsim_dev_take_snapshot_fops);
 	return 0;
 
+err_metric_exit:
+	nsim_dev_metric_exit(nsim_dev);
 err_health_exit:
 	nsim_dev_health_exit(nsim_dev);
 err_traps_exit:
@@ -1089,9 +1170,13 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 	if (err)
 		goto err_debugfs_exit;
 
-	err = nsim_bpf_dev_init(nsim_dev);
+	err = nsim_dev_metric_init(nsim_dev);
 	if (err)
 		goto err_health_exit;
+
+	err = nsim_bpf_dev_init(nsim_dev);
+	if (err)
+		goto err_metric_exit;
 
 	err = nsim_dev_port_add_all(nsim_dev, nsim_bus_dev->port_count);
 	if (err)
@@ -1103,6 +1188,8 @@ int nsim_dev_probe(struct nsim_bus_dev *nsim_bus_dev)
 
 err_bpf_dev_exit:
 	nsim_bpf_dev_exit(nsim_dev);
+err_metric_exit:
+	nsim_dev_metric_exit(nsim_dev);
 err_health_exit:
 	nsim_dev_health_exit(nsim_dev);
 err_debugfs_exit:
@@ -1133,6 +1220,7 @@ static void nsim_dev_reload_destroy(struct nsim_dev *nsim_dev)
 		return;
 	debugfs_remove(nsim_dev->take_snapshot);
 	nsim_dev_port_del_all(nsim_dev);
+	nsim_dev_metric_exit(nsim_dev);
 	nsim_dev_health_exit(nsim_dev);
 	nsim_dev_traps_exit(devlink);
 	nsim_dev_dummy_region_exit(nsim_dev);
