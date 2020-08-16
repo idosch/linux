@@ -21,6 +21,7 @@ general.
    devlink-region
    devlink-resource
    devlink-trap
+   devlink-metric
 
 Driver-specific documentation
 -----------------------------
