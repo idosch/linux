@@ -10204,6 +10204,58 @@ static inline void mlxsw_reg_tnumt_pack(char *payload,
 	mlxsw_reg_tnumt_record_size_set(payload, record_size);
 }
 
+/* TNCR-V2 - Tunneling NVE Counters Register Version 2
+ * ---------------------------------------------------
+ * The TNCR-V2 register exposes counters of NVE encapsulation and
+ * decapsulation.
+ *
+ * Note: Not supported by Spectrum-1.
+ */
+#define MLXSW_REG_TNCR2_ID 0xA004
+#define MLXSW_REG_TNCR2_LEN 0x38
+
+MLXSW_REG_DEFINE(tncr2, MLXSW_REG_TNCR2_ID, MLXSW_REG_TNCR2_LEN);
+
+/* reg_tncr2_clear_counters
+ * Clear counters.
+ * Access: OP
+ */
+MLXSW_ITEM32(reg, tncr2, clear_counters, 0x00, 31, 1);
+
+enum mlxsw_reg_tncr2_tunnel_port {
+	MLXSW_REG_TNCR2_TUNNEL_PORT_NVE,
+	MLXSW_REG_TNCR2_TUNNEL_PORT_VPLS,
+	MLXSW_REG_TNCR2_TUNNEL_FLEX_TUNNEL0,
+	MLXSW_REG_TNCR2_TUNNEL_FLEX_TUNNEL1,
+};
+
+/* reg_tncr2_tunnel_port
+ * Tunnel port.
+ * Access: Index
+ */
+MLXSW_ITEM32(reg, tncr2, tunnel_port, 0x00, 0, 4);
+
+/* reg_tncr2_count_decap_discards
+ * Count number of packets which had decapsulation discards from an NVE tunnel.
+ * Access: RO
+ */
+MLXSW_ITEM64(reg, tncr2, count_decap_discards, 0x28, 0, 64);
+
+/* reg_tncr2_count_encap_discards
+ * Count number of packets which had encapsulation discards to an NVE tunnel.
+ * Access: RO
+ */
+MLXSW_ITEM64(reg, tncr2, count_encap_discards, 0x30, 0, 64);
+
+static inline void mlxsw_reg_tncr2_pack(char *payload,
+					enum mlxsw_reg_tncr2_tunnel_port tport,
+					bool clear_counters)
+{
+	MLXSW_REG_ZERO(tncr2, payload);
+	mlxsw_reg_tncr2_clear_counters_set(payload, clear_counters);
+	mlxsw_reg_tncr2_tunnel_port_set(payload, tport);
+}
+
 /* TNQCR - Tunneling NVE QoS Configuration Register
  * ------------------------------------------------
  * The TNQCR register configures how QoS is set in encapsulation into the
@@ -11047,6 +11099,7 @@ static const struct mlxsw_reg_info *mlxsw_reg_infos[] = {
 	MLXSW_REG(tngcr),
 	MLXSW_REG(tncr),
 	MLXSW_REG(tnumt),
+	MLXSW_REG(tncr2),
 	MLXSW_REG(tnqcr),
 	MLXSW_REG(tnqdr),
 	MLXSW_REG(tneem),
