@@ -6,6 +6,7 @@
 
 #include <linux/netlink.h>
 #include <linux/rhashtable.h>
+#include <net/devlink.h>
 
 #include "spectrum.h"
 
@@ -20,10 +21,19 @@ struct mlxsw_sp_nve_config {
 	union mlxsw_sp_l3addr ul_sip;
 };
 
+struct mlxsw_sp_nve_metrics {
+	struct devlink_metric *counter_encap;
+	struct devlink_metric *counter_decap;
+	struct devlink_metric *counter_decap_errors;
+	struct devlink_metric *counter_decap_discards;
+	struct devlink_metric *counter_encap_discards;
+};
+
 struct mlxsw_sp_nve {
 	struct mlxsw_sp_nve_config config;
 	struct rhashtable mc_list_ht;
 	struct mlxsw_sp *mlxsw_sp;
+	struct mlxsw_sp_nve_metrics metrics;
 	const struct mlxsw_sp_nve_ops **nve_ops_arr;
 	unsigned int num_nve_tunnels;	/* Protected by RTNL */
 	unsigned int num_max_mc_entries[MLXSW_SP_L3_PROTO_MAX];
