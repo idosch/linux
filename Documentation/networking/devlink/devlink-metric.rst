@@ -24,3 +24,14 @@ driver-specific ``devlink`` documentation under
 
 When possible, a selftest (under ``tools/testing/selftests/drivers/``) should
 also be provided to ensure the metrics are updated under the right conditions.
+
+Testing
+=======
+
+See ``tools/testing/selftests/drivers/net/netdevsim/devlink.sh`` for a
+test covering the core infrastructure. Test cases should be added for any new
+functionality.
+
+Device drivers should focus their tests on device-specific functionality, such
+as making sure the exposed metrics are correctly incremented and read from the
+device.

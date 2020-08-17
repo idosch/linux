@@ -5,7 +5,8 @@ lib_dir=$(dirname $0)/../../../net/forwarding
 
 ALL_TESTS="fw_flash_test params_test regions_test reload_test \
 	   netns_reload_test resource_test dev_info_test \
-	   empty_reporter_test dummy_reporter_test"
+	   empty_reporter_test dummy_reporter_test \
+	   metric_counter_test"
 NUM_NETIFS=0
 source $lib_dir/lib.sh
 
@@ -484,6 +485,52 @@ dummy_reporter_test()
 	check_err $? "Failed clear dump of dummy reporter"
 
 	log_test "dummy reporter test"
+}
+
+metric_counter_value_get()
+{
+	local metric=$1; shift
+
+	cmd_jq "devlink -jps dev metric show $DL_HANDLE metric $metric" \
+		'.[][][]["value"]'
+}
+
+metric_group_get()
+{
+	local metric=$1; shift
+
+	cmd_jq "devlink -jp dev metric show $DL_HANDLE metric $metric" \
+		'.[][][]["group"]'
+}
+
+metric_counter_test()
+{
+	RET=0
+
+	local val_t0=$(metric_counter_value_get dummy_counter)
+	local val_t1=$(metric_counter_value_get dummy_counter)
+	(( val_t0 < val_t1 ))
+	check_err $? "Expected to read a higher value in second read"
+
+	echo "y" > $DEBUGFS_DIR/metric/fail_counter_get
+	metric_counter_value_get dummy_counter
+	check_fail $? "Unexpected success of counter get"
+	echo "n" > $DEBUGFS_DIR/metric/fail_counter_get
+
+	devlink dev metric set $DL_HANDLE metric dummy_counter group 10
+
+	(( 10 == $(metric_group_get dummy_counter) ))
+	check_err $? "Expected \"dummy_counter\" to be in group 10"
+
+	devlink dev metric show group 10 | grep -q "dummy_counter"
+	check_err $? "Expected \"dummy_counter\" to be dumped"
+
+	devlink dev metric show group 20 | grep -q "dummy_counter"
+	check_fail $? "Did not expect to see \"dummy_counter\" in group 20"
+
+	devlink dev metric set $DL_HANDLE metric dummy_counter group 0
+
+	log_test "metric counter test"
 }
 
 setup_prepare()
