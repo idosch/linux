@@ -893,7 +893,7 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 	struct nexthop *nhp = nhge->nh_parent;
 	struct nexthop *nh = nhge->nh;
 	struct nh_group *nhg, *newg;
-	int i, j;
+	int i, j, err;
 
 	WARN_ON(!nh);
 
@@ -940,6 +940,10 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 
 	list_del(&nhge->nh_list);
 	nexthop_put(nhge->nh);
+
+	err = call_nexthop_notifiers(net, NEXTHOP_EVENT_REPLACE, nhp, NULL);
+	if (err)
+		pr_err("Failed to replace nexthop group after nexthop deletion\n");
 
 	if (nlinfo)
 		nexthop_notify(RTM_NEWNEXTHOP, nhp, nlinfo);
