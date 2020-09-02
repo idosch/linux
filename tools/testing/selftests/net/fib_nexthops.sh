@@ -148,6 +148,9 @@ setup()
 	IP="ip -netns me"
 	BRIDGE="bridge -netns me"
 	set -e
+	echo 10 > /sys/bus/netdevsim/new_device
+	devlink dev reload netdevsim/netdevsim10 netns me
+
 	$IP li add veth1 type veth peer name veth2
 	$IP li set veth1 up
 	$IP addr add 172.16.1.1/24 dev veth1
@@ -186,6 +189,8 @@ cleanup()
 	for ns in me peer remote; do
 		ip netns del ${ns} 2>/dev/null
 	done
+
+	echo 10 > /sys/bus/netdevsim/del_device 2>/dev/null
 }
 
 check_output()
