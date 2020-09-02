@@ -200,13 +200,14 @@ multipath6_l4_test()
        local desc="$1"
        local weight_rp12=$2
        local weight_rp13=$3
+       local sysctl_val=$4
        local t0_rp12 t0_rp13 t1_rp12 t1_rp13
        local packets_rp12 packets_rp13
 
        # Transmit multiple flows from h1 to h2 and make sure they are
        # distributed between both multipath links (rp12 and rp13)
        # according to the configured weights.
-       sysctl_set net.ipv6.fib_multipath_hash_policy 1
+       sysctl_set net.ipv6.fib_multipath_hash_policy $sysctl_val
 
        ip route replace 2001:db8:2::/64 vrf vrf-r1 \
 	       nexthop via fe80:2::22 dev $rp12 weight $weight_rp12 \
@@ -237,8 +238,11 @@ multipath6_test()
        local desc="$1"
        local weight_rp12=$2
        local weight_rp13=$3
+       local sysctl_val=$4
        local t0_rp12 t0_rp13 t1_rp12 t1_rp13
        local packets_rp12 packets_rp13
+
+       sysctl_set net.ipv6.fib_multipath_hash_policy $sysctl_val
 
        ip route replace 2001:db8:2::/64 vrf vrf-r1 \
 	       nexthop via fe80:2::22 dev $rp12 weight $weight_rp12 \
@@ -262,6 +266,8 @@ multipath6_test()
        ip route replace 2001:db8:2::/64 vrf vrf-r1 \
 	       nexthop via fe80:2::22 dev $rp12 \
 	       nexthop via fe80:3::23 dev $rp13
+
+       sysctl_restore net.ipv6.fib_multipath_hash_policy
 }
 
 multipath_test()
@@ -272,14 +278,18 @@ multipath_test()
 	multipath4_test "Weighted MP 11:45" 11 45
 
 	log_info "Running IPv6 multipath tests"
-	multipath6_test "ECMP" 1 1
-	multipath6_test "Weighted MP 2:1" 2 1
-	multipath6_test "Weighted MP 11:45" 11 45
+	multipath6_test "ECMP" 1 1 0
+	multipath6_test "Weighted MP 2:1" 2 1 0
+	multipath6_test "Weighted MP 11:45" 11 45 0
 
 	log_info "Running IPv6 L4 hash multipath tests"
-	multipath6_l4_test "ECMP" 1 1
-	multipath6_l4_test "Weighted MP 2:1" 2 1
-	multipath6_l4_test "Weighted MP 11:45" 11 45
+	multipath6_l4_test "ECMP" 1 1 1
+	multipath6_l4_test "Weighted MP 2:1" 2 1 1
+	multipath6_l4_test "Weighted MP 11:45" 11 45 1
+
+	log_info "Running IPv6 L4 and flow label hash multipath tests"
+	multipath6_test "ECMP" 1 1 3
+	multipath6_l4_test "ECMP" 1 1 3
 }
 
 setup_prepare()
