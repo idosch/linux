@@ -7969,24 +7969,53 @@ static void mlxsw_sp_mp4_hash_init(struct mlxsw_sp *mlxsw_sp, char *recr2_pl)
 
 static void mlxsw_sp_mp6_hash_init(struct mlxsw_sp *mlxsw_sp, char *recr2_pl)
 {
-	bool only_l3 = !ip6_multipath_hash_policy(mlxsw_sp_net(mlxsw_sp));
-
-	mlxsw_sp_mp_hash_header_set(recr2_pl,
-				    MLXSW_REG_RECR2_IPV6_EN_NOT_TCP_NOT_UDP);
-	mlxsw_sp_mp_hash_header_set(recr2_pl, MLXSW_REG_RECR2_IPV6_EN_TCP_UDP);
-	mlxsw_reg_recr2_ipv6_sip_enable(recr2_pl);
-	mlxsw_reg_recr2_ipv6_dip_enable(recr2_pl);
-	mlxsw_sp_mp_hash_field_set(recr2_pl, MLXSW_REG_RECR2_IPV6_NEXT_HEADER);
-	if (only_l3) {
+	switch (ip6_multipath_hash_policy(mlxsw_sp_net(mlxsw_sp))) {
+	case 0:
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_NOT_TCP_NOT_UDP);
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_TCP_UDP);
+		mlxsw_reg_recr2_ipv6_sip_enable(recr2_pl);
+		mlxsw_reg_recr2_ipv6_dip_enable(recr2_pl);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_IPV6_NEXT_HEADER);
 		mlxsw_sp_mp_hash_field_set(recr2_pl,
 					   MLXSW_REG_RECR2_IPV6_FLOW_LABEL);
-	} else {
+		break;
+	case 1:
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_NOT_TCP_NOT_UDP);
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_TCP_UDP);
+		mlxsw_reg_recr2_ipv6_sip_enable(recr2_pl);
+		mlxsw_reg_recr2_ipv6_dip_enable(recr2_pl);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_IPV6_NEXT_HEADER);
 		mlxsw_sp_mp_hash_header_set(recr2_pl,
 					    MLXSW_REG_RECR2_TCP_UDP_EN_IPV6);
 		mlxsw_sp_mp_hash_field_set(recr2_pl,
 					   MLXSW_REG_RECR2_TCP_UDP_SPORT);
 		mlxsw_sp_mp_hash_field_set(recr2_pl,
 					   MLXSW_REG_RECR2_TCP_UDP_DPORT);
+		break;
+	case 3:
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_NOT_TCP_NOT_UDP);
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_IPV6_EN_TCP_UDP);
+		mlxsw_reg_recr2_ipv6_sip_enable(recr2_pl);
+		mlxsw_reg_recr2_ipv6_dip_enable(recr2_pl);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_IPV6_NEXT_HEADER);
+		mlxsw_sp_mp_hash_header_set(recr2_pl,
+					    MLXSW_REG_RECR2_TCP_UDP_EN_IPV6);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_TCP_UDP_SPORT);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_TCP_UDP_DPORT);
+		mlxsw_sp_mp_hash_field_set(recr2_pl,
+					   MLXSW_REG_RECR2_IPV6_FLOW_LABEL);
+		break;
 	}
 }
 
