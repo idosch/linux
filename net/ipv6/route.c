@@ -2432,6 +2432,35 @@ u32 rt6_multipath_hash(const struct net *net, const struct flowi6 *fl6,
 			hash_keys.basic.ip_proto = fl6->flowi6_proto;
 		}
 		break;
+	case 3:
+		if (skb) {
+			unsigned int flag = FLOW_DISSECTOR_F_STOP_AT_ENCAP;
+			struct flow_keys keys;
+
+			memset(&hash_keys, 0, sizeof(hash_keys));
+
+			if (!flkeys) {
+				skb_flow_dissect_flow_keys(skb, &keys, flag);
+				flkeys = &keys;
+			}
+			hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
+			hash_keys.addrs.v6addrs.src = flkeys->addrs.v6addrs.src;
+			hash_keys.addrs.v6addrs.dst = flkeys->addrs.v6addrs.dst;
+			hash_keys.ports.src = flkeys->ports.src;
+			hash_keys.ports.dst = flkeys->ports.dst;
+			hash_keys.tags.flow_label = flkeys->tags.flow_label;
+			hash_keys.basic.ip_proto = flkeys->basic.ip_proto;
+		} else {
+			memset(&hash_keys, 0, sizeof(hash_keys));
+			hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
+			hash_keys.addrs.v6addrs.src = fl6->saddr;
+			hash_keys.addrs.v6addrs.dst = fl6->daddr;
+			hash_keys.ports.src = fl6->fl6_sport;
+			hash_keys.ports.dst = fl6->fl6_dport;
+			hash_keys.tags.flow_label = (__force u32)flowi6_get_flowlabel(fl6);
+			hash_keys.basic.ip_proto = fl6->flowi6_proto;
+		}
+		break;
 	}
 	mhash = flow_hash_from_keys(&hash_keys);
 
