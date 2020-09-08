@@ -329,7 +329,7 @@ static int nsim_fib4_rt_add(struct nsim_fib_data *data,
 		goto err_fib_dismiss;
 	}
 
-	//nsim_fib4_rt_hw_flags_set(net, fib4_rt, true);
+	nsim_fib4_rt_hw_flags_set(net, fib4_rt, true);
 
 	return 0;
 
@@ -356,7 +356,7 @@ static int nsim_fib4_rt_replace(struct nsim_fib_data *data,
 		return err;
 	}
 
-	//nsim_fib4_rt_hw_flags_set(net, fib4_rt, true);
+	nsim_fib4_rt_hw_flags_set(net, fib4_rt, true);
 
 	nsim_fib4_rt_hw_flags_set(net, fib4_rt_old, false);
 	nsim_fib4_rt_destroy(fib4_rt_old);
@@ -604,8 +604,8 @@ static void nsim_fib6_rt_hw_flags_set(const struct nsim_fib6_rt *fib6_rt,
 {
 	struct nsim_fib6_rt_nh *fib6_rt_nh;
 
-	//list_for_each_entry(fib6_rt_nh, &fib6_rt->nh_list, list)
-		//fib6_info_hw_flags_set(fib6_rt_nh->rt, false, trap);
+	list_for_each_entry(fib6_rt_nh, &fib6_rt->nh_list, list)
+		fib6_info_hw_flags_set(fib6_rt_nh->rt, false, trap);
 }
 
 static int nsim_fib6_rt_add(struct nsim_fib_data *data,
@@ -626,7 +626,7 @@ static int nsim_fib6_rt_add(struct nsim_fib_data *data,
 		goto err_fib_dismiss;
 	}
 
-	//nsim_fib6_rt_hw_flags_set(fib6_rt, true);
+	nsim_fib6_rt_hw_flags_set(fib6_rt, true);
 
 	return 0;
 
@@ -652,7 +652,7 @@ static int nsim_fib6_rt_replace(struct nsim_fib_data *data,
 		return err;
 	}
 
-	//nsim_fib6_rt_hw_flags_set(fib6_rt, true);
+	nsim_fib6_rt_hw_flags_set(fib6_rt, true);
 
 	nsim_fib6_rt_hw_flags_set(fib6_rt_old, false);
 	nsim_fib6_rt_destroy(fib6_rt_old);
@@ -925,7 +925,7 @@ static int nsim_nexthop_add(struct nsim_fib_data *data,
 		goto err_nexthop_dismiss;
 	}
 
-	//nexthop_hw_flags_set(net, nexthop->id, false, true);
+	nexthop_hw_flags_set(net, nexthop->id, false, true);
 
 	return 0;
 
@@ -954,7 +954,7 @@ static int nsim_nexthop_replace(struct nsim_fib_data *data,
 		goto err_nexthop_dismiss;
 	}
 
-	//nexthop_hw_flags_set(net, nexthop->id, false, true);
+	nexthop_hw_flags_set(net, nexthop->id, false, true);
 	nsim_nexthop_account(data, nexthop_old->occ, false, extack);
 	nsim_nexthop_destroy(nexthop_old);
 
