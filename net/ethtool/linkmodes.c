@@ -290,9 +290,9 @@ linkmodes_set_policy[ETHTOOL_A_LINKMODES_MAX + 1] = {
 };
 
 /* Set advertised link modes to all supported modes matching requested speed
- * and duplex values. Called when autonegotiation is on, speed or duplex is
- * requested but no link mode change. This is done in userspace with ioctl()
- * interface, move it into kernel for netlink.
+ * and duplex values, if specified. Called when autonegotiation is on, but no
+ * link mode change. This is done in userspace with ioctl() interface, move it
+ * into kernel for netlink.
  * Returns true if advertised modes bitmap was modified.
  */
 static bool ethnl_auto_linkmodes(struct ethtool_link_ksettings *ksettings,
@@ -383,7 +383,6 @@ static int ethnl_update_linkmodes(struct genl_info *info, struct nlattr **tb,
 	ethnl_update_u8(&lsettings->master_slave_cfg, master_slave_cfg, mod);
 
 	if (!tb[ETHTOOL_A_LINKMODES_OURS] && lsettings->autoneg &&
-	    (req_speed || req_duplex) &&
 	    ethnl_auto_linkmodes(ksettings, req_speed, req_duplex))
 		*mod = true;
 
