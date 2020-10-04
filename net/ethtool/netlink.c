@@ -10,7 +10,7 @@ static bool ethnl_ok __read_mostly;
 static u32 ethnl_bcast_seq;
 
 #define ETHTOOL_FLAGS_BASIC (ETHTOOL_FLAG_COMPACT_BITSETS |	\
-			     ETHTOOL_FLAG_OMIT_REPLY)
+			     ETHTOOL_FLAG_OMIT_REPLY | ETHTOOL_FLAG_LEGACY)
 #define ETHTOOL_FLAGS_STATS (ETHTOOL_FLAGS_BASIC | ETHTOOL_FLAG_STATS)
 
 const struct nla_policy ethnl_header_policy[] = {
