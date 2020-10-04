@@ -277,9 +277,9 @@ const struct nla_policy ethnl_linkmodes_set_policy[] = {
 };
 
 /* Set advertised link modes to all supported modes matching requested speed
- * and duplex values. Called when autonegotiation is on, speed or duplex is
- * requested but no link mode change. This is done in userspace with ioctl()
- * interface, move it into kernel for netlink.
+ * and duplex values, if specified. Called when autonegotiation is on, speed,
+ * duplex or legacy behavior is requested but no link mode change. This is done
+ * in userspace with ioctl() interface, move it into kernel for netlink.
  * Returns true if advertised modes bitmap was modified.
  */
 static bool ethnl_auto_linkmodes(struct ethtool_link_ksettings *ksettings,
@@ -327,7 +327,7 @@ static bool ethnl_validate_master_slave_cfg(u8 cfg)
 
 static int ethnl_update_linkmodes(struct genl_info *info, struct nlattr **tb,
 				  struct ethtool_link_ksettings *ksettings,
-				  bool *mod)
+				  bool req_legacy, bool *mod)
 {
 	struct ethtool_link_settings *lsettings = &ksettings->base;
 	bool req_speed, req_duplex;
@@ -370,7 +370,7 @@ static int ethnl_update_linkmodes(struct genl_info *info, struct nlattr **tb,
 	ethnl_update_u8(&lsettings->master_slave_cfg, master_slave_cfg, mod);
 
 	if (!tb[ETHTOOL_A_LINKMODES_OURS] && lsettings->autoneg &&
-	    (req_speed || req_duplex) &&
+	    (req_speed || req_duplex || req_legacy) &&
 	    ethnl_auto_linkmodes(ksettings, req_speed, req_duplex))
 		*mod = true;
 
@@ -384,6 +384,7 @@ int ethnl_set_linkmodes(struct sk_buff *skb, struct genl_info *info)
 	struct nlattr **tb = info->attrs;
 	struct net_device *dev;
 	bool mod = false;
+	bool req_legacy;
 	int ret;
 
 	ret = ethnl_parse_header_dev_get(&req_info,
@@ -392,6 +393,7 @@ int ethnl_set_linkmodes(struct sk_buff *skb, struct genl_info *info)
 					 true);
 	if (ret < 0)
 		return ret;
+	req_legacy = req_info.flags & ETHTOOL_FLAG_LEGACY;
 	dev = req_info.dev;
 	ret = -EOPNOTSUPP;
 	if (!dev->ethtool_ops->get_link_ksettings ||
@@ -409,7 +411,7 @@ int ethnl_set_linkmodes(struct sk_buff *skb, struct genl_info *info)
 		goto out_ops;
 	}
 
-	ret = ethnl_update_linkmodes(info, tb, &ksettings, &mod);
+	ret = ethnl_update_linkmodes(info, tb, &ksettings, req_legacy, &mod);
 	if (ret < 0)
 		goto out_ops;
 
