@@ -94,10 +94,13 @@ enum {
 #define ETHTOOL_FLAG_OMIT_REPLY	(1 << 1)
 /* request statistics, if supported by the driver */
 #define ETHTOOL_FLAG_STATS		(1 << 2)
+/* be compatible with legacy ioctl interface */
+#define ETHTOOL_FLAG_LEGACY		(1 << 3)
 
 #define ETHTOOL_FLAG_ALL (ETHTOOL_FLAG_COMPACT_BITSETS | \
 			  ETHTOOL_FLAG_OMIT_REPLY | \
-			  ETHTOOL_FLAG_STATS)
+			  ETHTOOL_FLAG_STATS | \
+			  ETHTOOL_FLAG_LEGACY)
 
 enum {
 	ETHTOOL_A_HEADER_UNSPEC,

@@ -65,11 +65,12 @@ all devices providing it (each device in a separate message).
 types. The interpretation of these flags is the same for all request types but
 the flags may not apply to requests. Recognized flags are:
 
-  =================================  ===================================
+  =================================  =========================================
   ``ETHTOOL_FLAG_COMPACT_BITSETS``   use compact format bitsets in reply
   ``ETHTOOL_FLAG_OMIT_REPLY``        omit optional reply (_SET and _ACT)
   ``ETHTOOL_FLAG_STATS``             include optional device statistics
-  =================================  ===================================
+  ``ETHTOOL_FLAG_LEGACY``            be compatible with legacy ioctl interface
+  =================================  =========================================
 
 New request flags should follow the general idea that if the flag is not set,
 the behaviour is backward compatible, i.e. requests from old clients not aware
@@ -444,6 +445,10 @@ This autoselection is done on ethtool side with ioctl interface, netlink
 interface is supposed to allow requesting changes without knowing what exactly
 kernel supports.
 
+If autonegotiation is on (either set now or kept from before), no other
+parameter is specified (e.g., speed) and ``ETHTOOL_FLAG_LEGACY`` flag is set,
+kernel adjusts advertised modes to all supported modes. This autoselection is
+done on ethtool side with ioctl interface.
 
 LINKSTATE_GET
 =============
