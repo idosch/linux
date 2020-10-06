@@ -1814,6 +1814,8 @@ offload:
 		rtm->rtm_flags |= RTM_F_OFFLOAD;
 	if (fri->trap)
 		rtm->rtm_flags |= RTM_F_TRAP;
+	if (fri->queue)
+		rtm->rtm_flags |= RTM_F_QUEUE;
 
 	nlmsg_end(skb, nlh);
 	return 0;

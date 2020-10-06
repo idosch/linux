@@ -195,7 +195,8 @@ struct fib6_info {
 					fib6_destroying:1,
 					offload:1,
 					trap:1,
-					unused:2;
+					queue:1,
+					unused:1;
 
 	struct rcu_head			rcu;
 	struct nexthop			*nh;

@@ -5608,6 +5608,8 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 			rtm->rtm_flags |= RTM_F_OFFLOAD;
 		if (rt->trap)
 			rtm->rtm_flags |= RTM_F_TRAP;
+		if (rt->queue)
+			rtm->rtm_flags |= RTM_F_QUEUE;
 	}
 
 	if (rtnl_put_cacheinfo(skb, dst, 0, expires, dst ? dst->error : 0) < 0)
