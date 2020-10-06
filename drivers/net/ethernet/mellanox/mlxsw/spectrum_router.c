@@ -4153,6 +4153,24 @@ mlxsw_sp_rt6_nexthop(struct mlxsw_sp_nexthop_group *nh_grp,
 }
 
 static void
+mlxsw_sp_fib4_entry_queue_set(struct mlxsw_sp *mlxsw_sp,
+			      const struct fib_entry_notifier_info *fen_info)
+{
+	struct fib_rt_info fri;
+
+	fri.fi = fen_info->fi;
+	fri.tb_id = fen_info->tb_id;
+	fri.dst = cpu_to_be32(fen_info->dst);
+	fri.dst_len = fen_info->dst_len;
+	fri.tos = fen_info->tos;
+	fri.type = fen_info->type;
+	fri.offload = false;
+	fri.trap = false;
+	fri.queue = true;
+	fib_alias_hw_flags_set(mlxsw_sp_net(mlxsw_sp), &fri);
+}
+
+static void
 mlxsw_sp_fib4_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 				 struct mlxsw_sp_fib_entry *fib_entry)
 {
@@ -6240,6 +6258,8 @@ static int mlxsw_sp_router_fib_event(struct notifier_block *nb,
 				NL_SET_ERR_MSG_MOD(info->extack, "IPv4 route with nexthop objects is not supported");
 				return notifier_from_errno(-EINVAL);
 			}
+			mlxsw_sp_fib4_entry_queue_set(router->mlxsw_sp,
+						      fen_info);
 		} else if (info->family == AF_INET6) {
 			struct fib6_entry_notifier_info *fen6_info;
 
@@ -6250,6 +6270,8 @@ static int mlxsw_sp_router_fib_event(struct notifier_block *nb,
 				NL_SET_ERR_MSG_MOD(info->extack, "IPv6 route with nexthop objects is not supported");
 				return notifier_from_errno(-EINVAL);
 			}
+			fib6_info_hw_flags_set(fen6_info->rt, false, false,
+					       true);
 		}
 		break;
 	}
