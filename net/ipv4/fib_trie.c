@@ -1047,6 +1047,7 @@ void fib_alias_hw_flags_set(struct net *net, const struct fib_rt_info *fri)
 
 	fa_match->offload = fri->offload;
 	fa_match->trap = fri->trap;
+	fa_match->queue = fri->queue;
 
 out:
 	rcu_read_unlock();
@@ -2262,6 +2263,7 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 				fri.type = fa->fa_type;
 				fri.offload = fa->offload;
 				fri.trap = fa->trap;
+				fri.queue = fa->queue;
 				err = fib_dump_info(skb,
 						    NETLINK_CB(cb->skb).portid,
 						    cb->nlh->nlmsg_seq,

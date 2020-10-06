@@ -307,6 +307,7 @@ static void nsim_fib4_rt_hw_flags_set(struct net *net,
 	fri.type = fib4_rt->type;
 	fri.offload = false;
 	fri.trap = trap;
+	fri.queue = false;
 	fib_alias_hw_flags_set(net, &fri);
 }
 

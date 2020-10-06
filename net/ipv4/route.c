@@ -3306,6 +3306,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 				    fa->fa_type == fri.type) {
 					fri.offload = fa->offload;
 					fri.trap = fa->trap;
+					fri.queue = fa->queue;
 					break;
 				}
 			}
