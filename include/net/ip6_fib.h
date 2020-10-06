@@ -338,10 +338,11 @@ static inline void fib6_info_release(struct fib6_info *f6i)
 }
 
 static inline void fib6_info_hw_flags_set(struct fib6_info *f6i, bool offload,
-					  bool trap)
+					  bool trap, bool queue)
 {
 	f6i->offload = offload;
 	f6i->trap = trap;
+	f6i->queue = queue;
 }
 
 enum fib6_walk_state {

@@ -606,7 +606,7 @@ static void nsim_fib6_rt_hw_flags_set(const struct nsim_fib6_rt *fib6_rt,
 	struct nsim_fib6_rt_nh *fib6_rt_nh;
 
 	list_for_each_entry(fib6_rt_nh, &fib6_rt->nh_list, list)
-		fib6_info_hw_flags_set(fib6_rt_nh->rt, false, trap);
+		fib6_info_hw_flags_set(fib6_rt_nh->rt, false, trap, false);
 }
 
 static int nsim_fib6_rt_add(struct nsim_fib_data *data,
