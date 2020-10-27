@@ -4650,12 +4650,21 @@ static int mlxsw_sp_nexthop4_group_get(struct mlxsw_sp *mlxsw_sp,
 {
 	struct mlxsw_sp_nexthop_group *nh_grp;
 
+	if (fi->nh) {
+		nh_grp = mlxsw_sp_nexthop_obj_group_lookup(mlxsw_sp,
+							   fi->nh->id);
+		if (WARN_ON_ONCE(!nh_grp))
+			return -EINVAL;
+		goto out;
+	}
+
 	nh_grp = mlxsw_sp_nexthop4_group_lookup(mlxsw_sp, fi);
 	if (!nh_grp) {
 		nh_grp = mlxsw_sp_nexthop4_group_create(mlxsw_sp, fi);
 		if (IS_ERR(nh_grp))
 			return PTR_ERR(nh_grp);
 	}
+out:
 	list_add_tail(&fib_entry->nexthop_group_node, &nh_grp->fib_list);
 	fib_entry->nh_group = nh_grp;
 	return 0;
@@ -4669,6 +4678,12 @@ static void mlxsw_sp_nexthop4_group_put(struct mlxsw_sp *mlxsw_sp,
 	list_del(&fib_entry->nexthop_group_node);
 	if (!list_empty(&nh_grp->fib_list))
 		return;
+
+	if (nh_grp->type == MLXSW_SP_NEXTHOP_GROUP_TYPE_OBJ) {
+		mlxsw_sp_nexthop_obj_group_destroy(mlxsw_sp, nh_grp);
+		return;
+	}
+
 	mlxsw_sp_nexthop4_group_destroy(mlxsw_sp, nh_grp);
 }
 
@@ -5959,7 +5974,16 @@ mlxsw_sp_nexthop6_group_destroy(struct mlxsw_sp *mlxsw_sp,
 static int mlxsw_sp_nexthop6_group_get(struct mlxsw_sp *mlxsw_sp,
 				       struct mlxsw_sp_fib6_entry *fib6_entry)
 {
+	struct fib6_info *rt = mlxsw_sp_fib6_entry_rt(fib6_entry);
 	struct mlxsw_sp_nexthop_group *nh_grp;
+
+	if (rt->nh) {
+		nh_grp = mlxsw_sp_nexthop_obj_group_lookup(mlxsw_sp,
+							   rt->nh->id);
+		if (WARN_ON_ONCE(!nh_grp))
+			return -EINVAL;
+		goto out;
+	}
 
 	nh_grp = mlxsw_sp_nexthop6_group_lookup(mlxsw_sp, fib6_entry);
 	if (!nh_grp) {
@@ -5973,6 +5997,7 @@ static int mlxsw_sp_nexthop6_group_get(struct mlxsw_sp *mlxsw_sp,
 	 */
 	__mlxsw_sp_nexthop6_group_offload_refresh(nh_grp, fib6_entry);
 
+out:
 	list_add_tail(&fib6_entry->common.nexthop_group_node,
 		      &nh_grp->fib_list);
 	fib6_entry->common.nh_group = nh_grp;
@@ -5988,6 +6013,12 @@ static void mlxsw_sp_nexthop6_group_put(struct mlxsw_sp *mlxsw_sp,
 	list_del(&fib_entry->nexthop_group_node);
 	if (!list_empty(&nh_grp->fib_list))
 		return;
+
+	if (nh_grp->type == MLXSW_SP_NEXTHOP_GROUP_TYPE_OBJ) {
+		mlxsw_sp_nexthop_obj_group_destroy(mlxsw_sp, nh_grp);
+		return;
+	}
+
 	mlxsw_sp_nexthop6_group_destroy(mlxsw_sp, nh_grp);
 }
 
