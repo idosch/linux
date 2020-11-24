@@ -2224,6 +2224,24 @@ out:
 }
 EXPORT_SYMBOL(nexthop_bucket_set_hw_flags);
 
+void nexthop_res_grp_activity_update(struct net *net, u32 id, u32 num_buckets,
+				     unsigned long *activity)
+{
+	struct nexthop *nexthop;
+
+	rcu_read_lock();
+
+	nexthop = nexthop_find_by_id(net, id);
+	if (!nexthop)
+		goto out;
+
+	/* XXX: Complete me */
+
+out:
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(nexthop_res_grp_activity_update);
+
 static void __net_exit nexthop_net_exit(struct net *net)
 {
 	rtnl_lock();
