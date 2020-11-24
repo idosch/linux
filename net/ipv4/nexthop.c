@@ -2206,6 +2206,24 @@ out:
 }
 EXPORT_SYMBOL(nexthop_set_hw_flags);
 
+void nexthop_bucket_set_hw_flags(struct net *net, u32 id, u32 bucket_index,
+				 bool offload, bool trap)
+{
+	struct nexthop *nexthop;
+
+	rcu_read_lock();
+
+	nexthop = nexthop_find_by_id(net, id);
+	if (!nexthop)
+		goto out;
+
+	/* XXX: Complete me */
+
+out:
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(nexthop_bucket_set_hw_flags);
+
 static void __net_exit nexthop_net_exit(struct net *net)
 {
 	rtnl_lock();
