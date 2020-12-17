@@ -166,6 +166,30 @@ static int call_nexthop_notifiers(struct net *net,
 	return notifier_to_errno(err);
 }
 
+/* There are three users of RES_TABLE, and NHs etc. referenced from there:
+ *
+ * 1) a collection of callbacks for NH maintenance. This operates under
+ *    RTNL,
+ * 2) the delayed work that gradually balances the resilient table,
+ * 3) and nexthop_select_path(), operating under RCU.
+ *
+ * Both the delayed work and the RTNL block are writers, and need to
+ * maintain mutual exclusion. Since there are only two and well-known
+ * writers for each table, the RTNL code can make sure it has exclusive
+ * access thus:
+ *
+ * - Have the DW operate without locking;
+ * - synchronously cancel the DW;
+ * - do the writing;
+ * - if the write was not actually a delete, call rebalance, which
+ *   schedules DW again if necessary.
+ *
+ * The functions that are always called from the RTNL context use
+ * rtnl_dereference(). The functions that can also be called from the DW do
+ * a raw dereference and rely on the above mutual exclusion scheme.
+ */
+#define nh_res_dereference(p) (rcu_dereference_raw(p))
+
 static int call_nexthop_notifier(struct notifier_block *nb, struct net *net,
 				 enum nexthop_event_type event_type,
 				 struct nexthop *nh,
@@ -223,6 +247,9 @@ static void nexthop_free_group(struct nexthop *nh)
 	}
 
 	WARN_ON(nhg->spare == nhg);
+
+	if (nhg->resilient)
+		kfree(rcu_dereference_raw(nhg->res_table));
 
 	kfree(nhg->spare);
 	kfree(nhg);
@@ -282,6 +309,29 @@ static struct nh_group *nexthop_grp_alloc(u16 num_nh)
 	return nhg;
 }
 
+static void nh_res_table_upkeep_dw(struct work_struct *work);
+
+static struct nh_res_table *
+nexthop_res_table_alloc(struct net *net, u32 nhg_id, struct nh_config *cfg)
+{
+	const u32 num_nh_buckets = cfg->nh_grp_res_num_buckets;
+	struct nh_res_table *res_table;
+
+	res_table = kzalloc(struct_size(res_table, nh_buckets, num_nh_buckets),
+			    GFP_KERNEL);
+	if (!res_table)
+		return NULL;
+
+	res_table->net = net;
+	res_table->nhg_id = nhg_id;
+	INIT_DELAYED_WORK(&res_table->upkeep_dw, &nh_res_table_upkeep_dw);
+	INIT_LIST_HEAD(&res_table->uw_nh_entries);
+	res_table->idle_timer = cfg->nh_grp_res_idle_timer;
+	res_table->unbalanced_timer = cfg->nh_grp_res_unbalanced_timer;
+	res_table->num_nh_buckets = num_nh_buckets;
+	return res_table;
+}
+
 static void nh_base_seq_inc(struct net *net)
 {
 	while (++net->nexthop.seq == 0)
@@ -328,6 +378,13 @@ static u32 nh_find_unused_id(struct net *net)
 			return net->nexthop.last_id_allocated;
 	}
 	return 0;
+}
+
+static void nh_res_time_set_deadline(unsigned long next_time,
+				     unsigned long *deadline)
+{
+	if (time_before(next_time, *deadline))
+		*deadline = next_time;
 }
 
 static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
@@ -529,12 +586,15 @@ static bool valid_group_nh(struct nexthop *nh, unsigned int npaths,
 	if (nh->is_group) {
 		struct nh_group *nhg = rtnl_dereference(nh->nh_grp);
 
-		/* nested multipath (group within a group) is not
-		 * supported
-		 */
+		/* Nesting groups within groups is not supported. */
 		if (nhg->mpath) {
 			NL_SET_ERR_MSG(extack,
 				       "Multipath group can not be a nexthop within a group");
+			return false;
+		}
+		if (nhg->resilient) {
+			NL_SET_ERR_MSG(extack,
+				       "Resilient group can not be a nexthop within a group");
 			return false;
 		}
 		*is_fdb = nhg->fdb_nh;
@@ -716,6 +776,60 @@ static struct nexthop *nexthop_select_path_mp(struct nh_group *nhg, int hash)
 	return rc;
 }
 
+static unsigned long nh_res_bucket_used_time(const struct nh_res_bucket *bucket)
+{
+	return (unsigned long) atomic_long_read(&bucket->used_time);
+}
+
+static unsigned long
+nh_res_bucket_idle_point(const struct nh_res_table *res_table,
+			 const struct nh_res_bucket *bucket)
+{
+	return nh_res_bucket_used_time(bucket) + res_table->idle_timer;
+}
+
+static unsigned long nh_res_nhge_unb_point(const struct nh_res_table *res_table,
+					   const struct nh_grp_entry *nhge)
+{
+	return nhge->res.reserve_time + HZ * res_table->unbalanced_timer;
+}
+
+static void nh_res_bucket_set_idle(const struct nh_res_table *res_table,
+				   struct nh_res_bucket *bucket)
+{
+	unsigned long ut;
+
+	ut = jiffies - res_table->idle_timer;
+	atomic_long_set(&bucket->used_time, (long) ut);
+}
+
+static void nh_res_bucket_set_busy(struct nh_res_bucket *bucket)
+{
+	atomic_long_set(&bucket->used_time, (long) jiffies);
+}
+
+static void nh_res_nhge_set_reserve(struct nh_grp_entry *nhge)
+{
+	nhge->res.reserve_time = jiffies;
+	nhge->res.in_reserve = true;
+}
+
+static struct nexthop *nexthop_select_path_res(struct nh_group *nhg, int hash)
+{
+	struct nh_res_table *res_table = rcu_dereference(nhg->res_table);
+	u32 bucket_index = hash % res_table->num_nh_buckets;
+	struct nh_res_bucket *bucket;
+	struct nh_grp_entry *nhge;
+
+	/* nexthop_select_path() is expected to return a non-NULL value, so
+	 * skip protocol validation and just hand out whatever there is.
+	 */
+	bucket = &res_table->nh_buckets[bucket_index];
+	nh_res_bucket_set_busy(bucket);
+	nhge = rcu_dereference(bucket->nh_entry);
+	return nhge->nh;
+}
+
 struct nexthop *nexthop_select_path(struct nexthop *nh, int hash)
 {
 	struct nh_group *nhg;
@@ -726,6 +840,8 @@ struct nexthop *nexthop_select_path(struct nexthop *nh, int hash)
 	nhg = rcu_dereference(nh->nh_grp);
 	if (nhg->mpath)
 		return nexthop_select_path_mp(nhg, hash);
+	else if (nhg->resilient)
+		return nexthop_select_path_res(nhg, hash);
 
 	/* Unreachable. */
 	return NULL;
@@ -908,7 +1024,247 @@ static int fib_check_nh_list(struct nexthop *old, struct nexthop *new,
 	return 0;
 }
 
-static void nh_group_rebalance(struct nh_group *nhg)
+static bool nh_res_entry_is_balanced(const struct nh_grp_entry *nhge)
+{
+	return nhge->res.count_buckets == nhge->res.wants_buckets;
+}
+
+static bool nh_res_entry_is_overweight(const struct nh_grp_entry *nhge)
+{
+	return nhge->res.count_buckets > nhge->res.wants_buckets;
+}
+
+static bool nh_res_table_is_balanced(const struct nh_res_table *res_table)
+{
+	return list_empty(&res_table->uw_nh_entries);
+}
+
+static void nh_res_bucket_unset_nh(struct nh_res_bucket *bucket)
+{
+	struct nh_grp_entry *nhge;
+
+	if (bucket->occupied) {
+		nhge = nh_res_dereference(bucket->nh_entry);
+		nhge->res.count_buckets--;
+		if (nh_res_entry_is_balanced(nhge))
+			nhge->res.in_reserve = false;
+
+		bucket->occupied = false;
+	}
+}
+
+static void nh_res_bucket_set_nh(struct nh_res_bucket *bucket,
+				 struct nh_grp_entry *nhge)
+{
+	nh_res_bucket_unset_nh(bucket);
+
+	bucket->occupied = true;
+	rcu_assign_pointer(bucket->nh_entry, nhge);
+	nhge->res.count_buckets++;
+}
+
+static bool nh_res_bucket_should_migrate(struct nh_res_table *res_table,
+					 struct nh_res_bucket *bucket,
+					 unsigned long *deadline, bool *force)
+{
+	unsigned long now = jiffies;
+	struct nh_grp_entry *nhge;
+	unsigned long idle_point;
+
+	if (!bucket->occupied) {
+		*force = true;
+		return true;
+	}
+
+	nhge = nh_res_dereference(bucket->nh_entry);
+
+	if (!nh_res_entry_is_overweight(nhge))
+		return false;
+
+	idle_point = nh_res_bucket_idle_point(res_table, bucket);
+	if (time_after(now, idle_point))
+		return true;
+
+	WARN_ON_ONCE(!nhge->res.in_reserve);
+
+	/* Unbalanced timeout of 0 means "never force". */
+	if (res_table->unbalanced_timer) {
+		unsigned long unb_point = nh_res_nhge_unb_point(res_table,
+								nhge);
+
+		if (time_after(now, unb_point)) {
+			*force = false;
+			return true;
+		}
+
+		nh_res_time_set_deadline(unb_point, deadline);
+	}
+
+	nh_res_time_set_deadline(idle_point, deadline);
+	return false;
+}
+
+static bool nh_res_bucket_migrate(struct nh_res_table *res_table,
+				  u32 bucket_index, bool force)
+{
+	struct nh_res_bucket *bucket = &res_table->nh_buckets[bucket_index];
+	struct nh_grp_entry *new_nhge;
+
+	new_nhge = list_first_entry_or_null(&res_table->uw_nh_entries,
+					    struct nh_grp_entry,
+					    res.uw_nh_entry);
+	if (WARN_ON_ONCE(!new_nhge))
+		/* If this function is called, "bucket" is either not
+		 * occupied, or it belongs to a next hop that is
+		 * overweight. In either case, there ought to be a
+		 * corresponding underweight next hop.
+		 */
+		return false;
+
+	nh_res_bucket_set_nh(bucket, new_nhge);
+	nh_res_bucket_set_idle(res_table, bucket);
+
+	if (new_nhge->res.count_buckets == new_nhge->res.wants_buckets)
+		list_del(&new_nhge->res.uw_nh_entry);
+	return true;
+}
+
+#define NH_RES_UPKEEP_DW_MINIMUM_INTERVAL (HZ / 2)
+
+static void nh_res_table_upkeep(struct nh_res_table *res_table)
+{
+	unsigned long deadline;
+	u32 i;
+
+	/* Force timeout of 0 means "never force". */
+	if (res_table->unbalanced_timer)
+		deadline = jiffies + res_table->unbalanced_timer;
+	else
+		deadline = jiffies + res_table->idle_timer;
+
+	for (i = 0; i < res_table->num_nh_buckets; i++) {
+		struct nh_res_bucket *bucket = &res_table->nh_buckets[i];
+		bool force;
+
+		if (nh_res_bucket_should_migrate(res_table, bucket,
+						 &deadline, &force)) {
+			if (!nh_res_bucket_migrate(res_table, i, force)) {
+				unsigned long idle_point;
+
+				nh_res_bucket_set_busy(bucket);
+				idle_point = nh_res_bucket_idle_point(res_table,
+								      bucket);
+				nh_res_time_set_deadline(idle_point, &deadline);
+			}
+		}
+	}
+
+	if (!nh_res_table_is_balanced(res_table)) {
+		unsigned long now = jiffies;
+		unsigned long min_deadline;
+
+		min_deadline = now + NH_RES_UPKEEP_DW_MINIMUM_INTERVAL;
+		if (time_before(deadline, min_deadline))
+			deadline = min_deadline;
+
+		queue_delayed_work(system_power_efficient_wq,
+				   &res_table->upkeep_dw, deadline - now);
+	}
+}
+
+static void nh_res_table_upkeep_dw(struct work_struct *work)
+{
+	struct delayed_work *dw = to_delayed_work(work);
+	struct nh_res_table *res_table;
+
+	res_table = container_of(dw, struct nh_res_table, upkeep_dw);
+	nh_res_table_upkeep(res_table);
+}
+
+static void nh_res_table_cancel_upkeep(struct nh_res_table *res_table)
+{
+	cancel_delayed_work_sync(&res_table->upkeep_dw);
+}
+
+static void nh_res_group_rebalance(struct nh_group *nhg,
+				   struct nh_res_table *res_table)
+{
+	int prev_upper_bound = 0;
+	int total = 0;
+	int w = 0;
+	int i;
+
+	INIT_LIST_HEAD(&res_table->uw_nh_entries);
+
+	for (i = 0; i < nhg->num_nh; ++i)
+		total += nhg->nh_entries[i].weight;
+
+	for (i = 0; i < nhg->num_nh; ++i) {
+		struct nh_grp_entry *nhge = &nhg->nh_entries[i];
+		int upper_bound;
+
+		w += nhge->weight;
+		upper_bound = DIV_ROUND_CLOSEST(res_table->num_nh_buckets * w,
+						total);
+		nhge->res.wants_buckets = upper_bound - prev_upper_bound;
+
+		if (nhge->res.wants_buckets > nhge->res.count_buckets)
+			list_add(&nhge->res.uw_nh_entry,
+				 &res_table->uw_nh_entries);
+		else if (nhge->res.wants_buckets < nhge->res.count_buckets &&
+			   !nhge->res.in_reserve)
+			nh_res_nhge_set_reserve(nhge);
+
+		prev_upper_bound = upper_bound;
+	}
+}
+
+/* Migrate buckets in res_table so that they reference NHGE's from NHG with
+ * the right NH ID. Set those buckets that do not have a corresponding NHGE
+ * entry in NHG as not occupied.
+ */
+static void nh_res_table_migrate_buckets(struct nh_res_table *res_table,
+					 struct nh_group *nhg)
+{
+	u32 i;
+	int j;
+
+	for (i = 0; i < res_table->num_nh_buckets; i++) {
+		struct nh_res_bucket *bucket = &res_table->nh_buckets[i];
+		u32 id = rtnl_dereference(bucket->nh_entry)->nh->id;
+		bool found = false;
+
+		for (j = 0; j < nhg->num_nh; j++) {
+			struct nh_grp_entry *nhge = &nhg->nh_entries[j];
+
+			if (nhge->nh->id == id) {
+				nh_res_bucket_set_nh(bucket, nhge);
+				found = true;
+				break;
+			}
+		}
+
+		if (!found)
+			nh_res_bucket_unset_nh(bucket);
+	}
+}
+
+/* When resilient NH groups are replaced, the new NHG might only have a
+ * stub hash table with 0 buckets, because the number of buckets was not
+ * given on the command line.
+ */
+static void replace_nexthop_grp_res(struct nh_group *oldg,
+				    struct nh_group *newg)
+{
+	struct nh_res_table *old_res_table = rtnl_dereference(oldg->res_table);
+
+	nh_res_table_cancel_upkeep(old_res_table);
+	nh_res_table_migrate_buckets(old_res_table, newg);
+	nh_res_group_rebalance(newg, old_res_table);
+	nh_res_table_upkeep(old_res_table);
+}
+
+static void nh_mp_group_rebalance(struct nh_group *nhg)
 {
 	int total = 0;
 	int w = 0;
@@ -950,6 +1306,7 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 
 	newg->has_v4 = false;
 	newg->mpath = nhg->mpath;
+	newg->resilient = nhg->resilient;
 	newg->fdb_nh = nhg->fdb_nh;
 	newg->num_nh = nhg->num_nh;
 
@@ -977,7 +1334,11 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 		j++;
 	}
 
-	nh_group_rebalance(newg);
+	if (newg->mpath)
+		nh_mp_group_rebalance(newg);
+	else if (newg->resilient)
+		replace_nexthop_grp_res(nhg, newg);
+
 	rcu_assign_pointer(nhp->nh_grp, newg);
 
 	list_del(&nhge->nh_list);
@@ -1006,6 +1367,7 @@ static void remove_nexthop_from_groups(struct net *net, struct nexthop *nh,
 static void remove_nexthop_group(struct nexthop *nh, struct nl_info *nlinfo)
 {
 	struct nh_group *nhg = rcu_dereference_rtnl(nh->nh_grp);
+	struct nh_res_table *res_table;
 	int i, num_nh = nhg->num_nh;
 
 	for (i = 0; i < num_nh; ++i) {
@@ -1015,6 +1377,11 @@ static void remove_nexthop_group(struct nexthop *nh, struct nl_info *nlinfo)
 			continue;
 
 		list_del_init(&nhge->nh_list);
+	}
+
+	if (nhg->resilient) {
+		res_table = rtnl_dereference(nhg->res_table);
+		nh_res_table_cancel_upkeep(res_table);
 	}
 }
 
@@ -1094,6 +1461,9 @@ static int replace_nexthop_grp(struct net *net, struct nexthop *old,
 			       struct nexthop *new, struct nh_config *cfg,
 			       struct netlink_ext_ack *extack)
 {
+	struct nh_res_table *tmp_table = NULL;
+	struct nh_res_table *new_res_table;
+	struct nh_res_table *old_res_table;
 	struct nh_group *oldg, *newg;
 	int i, err;
 
@@ -1102,18 +1472,56 @@ static int replace_nexthop_grp(struct net *net, struct nexthop *old,
 		return -EINVAL;
 	}
 
-	err = call_nexthop_notifiers(net, NEXTHOP_EVENT_REPLACE, new, extack);
-	if (err)
-		return err;
-
 	oldg = rtnl_dereference(old->nh_grp);
 	newg = rtnl_dereference(new->nh_grp);
+
+	if (newg->mpath != oldg->mpath) {
+		NL_SET_ERR_MSG(extack, "Can not replace a nexthop group with one of a different type.");
+		return -EINVAL;
+	}
+
+	if (newg->mpath) {
+		err = call_nexthop_notifiers(net, NEXTHOP_EVENT_REPLACE, new,
+					     extack);
+		if (err)
+			return err;
+	} else if (newg->resilient) {
+		new_res_table = rtnl_dereference(newg->res_table);
+		old_res_table = rtnl_dereference(oldg->res_table);
+
+		/* Accept if num_nh_buckets was not given, but if it was
+		 * given, demand that the value be correct.
+		 */
+		if (cfg->nh_grp_res_has_num_buckets &&
+		    (cfg->nh_grp_res_num_buckets !=
+		     old_res_table->num_nh_buckets)) {
+			NL_SET_ERR_MSG(extack, "Can not change number of buckets of a resilient next hop group.");
+			return -EINVAL;
+		}
+
+		if (cfg->nh_grp_res_has_idle_timer)
+			old_res_table->idle_timer = cfg->nh_grp_res_idle_timer;
+		if (cfg->nh_grp_res_has_unbalanced_timer)
+			old_res_table->unbalanced_timer =
+				cfg->nh_grp_res_unbalanced_timer;
+
+		replace_nexthop_grp_res(oldg, newg);
+
+		tmp_table = new_res_table;
+		rcu_assign_pointer(newg->res_table, old_res_table);
+		rcu_assign_pointer(newg->spare->res_table, old_res_table);
+	}
 
 	/* update parents - used by nexthop code for cleanup */
 	for (i = 0; i < newg->num_nh; i++)
 		newg->nh_entries[i].nh_parent = old;
 
 	rcu_assign_pointer(old->nh_grp, newg);
+
+	if (newg->resilient) {
+		rcu_assign_pointer(oldg->res_table, tmp_table);
+		rcu_assign_pointer(oldg->spare->res_table, tmp_table);
+	}
 
 	for (i = 0; i < oldg->num_nh; i++)
 		oldg->nh_entries[i].nh_parent = new;
@@ -1364,6 +1772,28 @@ static int insert_nexthop(struct net *net, struct nexthop *new_nh,
 		goto out;
 	}
 
+	if (new_nh->is_group) {
+		struct nh_group *nhg = rtnl_dereference(new_nh->nh_grp);
+		struct nh_res_table *res_table;
+
+		if (nhg->resilient) {
+			res_table = rtnl_dereference(nhg->res_table);
+
+			if (!cfg->nh_grp_res_has_num_buckets) {
+				NL_SET_ERR_MSG(extack, "Number of buckets not specified for nexthop group insertion");
+				rc = -EINVAL;
+				goto out;
+			}
+
+			nh_res_group_rebalance(nhg, res_table);
+
+			/* Do not sent bucket notifications, we do full
+			 * notification below.
+			 */
+			nh_res_table_upkeep(res_table);
+		}
+	}
+
 	rb_link_node_rcu(&new_nh->rb_node, parent, pp);
 	rb_insert_color(&new_nh->rb_node, root);
 
@@ -1422,6 +1852,7 @@ static struct nexthop *nexthop_create_group(struct net *net,
 	u16 num_nh = nla_len(grps_attr) / sizeof(*entry);
 	struct nh_group *nhg;
 	struct nexthop *nh;
+	int err;
 	int i;
 
 	if (WARN_ON(!num_nh))
@@ -1453,8 +1884,10 @@ static struct nexthop *nexthop_create_group(struct net *net,
 		struct nh_info *nhi;
 
 		nhe = nexthop_find_by_id(net, entry[i].id);
-		if (!nexthop_get(nhe))
+		if (!nexthop_get(nhe)) {
+			err = -ENOENT;
 			goto out_no_nh;
+		}
 
 		nhi = rtnl_dereference(nhe->nh_info);
 		if (nhi->family == AF_INET)
@@ -1468,12 +1901,24 @@ static struct nexthop *nexthop_create_group(struct net *net,
 
 	if (cfg->nh_grp_type == NEXTHOP_GRP_TYPE_MPATH) {
 		nhg->mpath = 1;
+	} else if (false /* NEXTHOP_GRP_TYPE_RES */) {
+		struct nh_res_table *res_table;
+
+		res_table = nexthop_res_table_alloc(net, cfg->nh_id, cfg);
+		if (!res_table) {
+			err = -ENOMEM;
+			goto out_no_nh;
+		}
+
+		rcu_assign_pointer(nhg->spare->res_table, res_table);
+		rcu_assign_pointer(nhg->res_table, res_table);
+		nhg->resilient = true;
 	}
 
-	WARN_ON_ONCE(nhg->mpath != 1);
+	WARN_ON_ONCE(nhg->mpath + nhg->resilient != 1);
 
 	if (nhg->mpath)
-		nh_group_rebalance(nhg);
+		nh_mp_group_rebalance(nhg);
 
 	if (cfg->nh_fdb)
 		nhg->fdb_nh = 1;
@@ -1490,7 +1935,7 @@ out_no_nh:
 	kfree(nhg);
 	kfree(nh);
 
-	return ERR_PTR(-ENOENT);
+	return ERR_PTR(err);
 }
 
 static int nh_create_ipv4(struct net *net, struct nexthop *nh,
