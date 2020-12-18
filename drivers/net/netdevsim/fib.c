@@ -46,10 +46,11 @@ struct nsim_fib_data {
 	struct nsim_fib_entry nexthops;
 	struct rhashtable fib_rt_ht;
 	struct list_head fib_rt_list;
-	spinlock_t fib_lock;	/* Protects hashtable, list and accounting */
+	spinlock_t fib_lock;	/* Protects FIB HT, list and accounting */
 	struct notifier_block nexthop_nb;
 	struct rhashtable nexthop_ht;
 	struct devlink *devlink;
+	struct mutex nh_lock; /* Protects NH HT */
 };
 
 struct nsim_fib_rt_key {
@@ -1018,8 +1019,7 @@ static int nsim_nexthop_event_nb(struct notifier_block *nb, unsigned long event,
 	struct nh_notifier_info *info = ptr;
 	int err = 0;
 
-	ASSERT_RTNL();
-
+	mutex_lock(&data->nh_lock);
 	switch (event) {
 	case NEXTHOP_EVENT_REPLACE:
 		err = nsim_nexthop_insert(data, info);
@@ -1031,6 +1031,7 @@ static int nsim_nexthop_event_nb(struct notifier_block *nb, unsigned long event,
 		break;
 	}
 
+	mutex_unlock(&data->nh_lock);
 	return notifier_from_errno(err);
 }
 
@@ -1113,6 +1114,7 @@ struct nsim_fib_data *nsim_fib_create(struct devlink *devlink,
 		return ERR_PTR(-ENOMEM);
 	data->devlink = devlink;
 
+	mutex_init(&data->nh_lock);
 	err = rhashtable_init(&data->nexthop_ht, &nsim_nexthop_ht_params);
 	if (err)
 		goto err_data_free;
@@ -1172,6 +1174,7 @@ err_rhashtable_nexthop_destroy:
 	rhashtable_free_and_destroy(&data->nexthop_ht, nsim_nexthop_free,
 				    data);
 err_data_free:
+	mutex_destroy(&data->nh_lock);
 	kfree(data);
 	return ERR_PTR(err);
 }
@@ -1194,6 +1197,7 @@ void nsim_fib_destroy(struct devlink *devlink, struct nsim_fib_data *data)
 				    data);
 	rhashtable_free_and_destroy(&data->nexthop_ht, nsim_nexthop_free,
 				    data);
+	mutex_destroy(&data->nh_lock);
 	WARN_ON_ONCE(!list_empty(&data->fib_rt_list));
 	kfree(data);
 }
