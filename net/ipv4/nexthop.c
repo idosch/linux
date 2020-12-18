@@ -116,7 +116,8 @@ static int nh_notifier_grp_info_init(struct nh_notifier_info *info,
 	return 0;
 }
 
-static void nh_notifier_grp_info_fini(struct nh_notifier_info *info)
+static void nh_notifier_grp_info_fini(struct nh_notifier_info *info,
+				      const struct nexthop *nh)
 {
 	kfree(info->nh_grp);
 }
@@ -136,7 +137,7 @@ static void nh_notifier_info_fini(struct nh_notifier_info *info,
 				  const struct nexthop *nh)
 {
 	if (nh->is_group)
-		nh_notifier_grp_info_fini(info);
+		nh_notifier_grp_info_fini(info, nh);
 	else
 		nh_notifier_single_info_fini(info);
 }
