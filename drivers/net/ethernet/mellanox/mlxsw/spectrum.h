@@ -305,7 +305,7 @@ struct mlxsw_sp_port {
 		struct mlxsw_sp_port_xstats xstats;
 		struct delayed_work update_dw;
 	} periodic_hw_stats;
-	struct mlxsw_sp_port_sample __rcu *sample;
+	struct mlxsw_sp_port_sample __rcu *ing_sample;
 	struct list_head vlans_list;
 	struct mlxsw_sp_port_vlan *default_vlan;
 	struct mlxsw_sp_qdisc_state *qdisc;

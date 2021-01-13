@@ -271,7 +271,7 @@ static void mlxsw_sp_rx_sample_listener(struct sk_buff *skb, u8 local_port,
 	if (!mlxsw_sp_port)
 		goto out;
 
-	sample = rcu_dereference(mlxsw_sp_port->sample);
+	sample = rcu_dereference(mlxsw_sp_port->ing_sample);
 	if (!sample)
 		goto out;
 

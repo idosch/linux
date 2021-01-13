@@ -107,11 +107,11 @@ mlxsw_sp_mall_port_sample_add(struct mlxsw_sp_port *mlxsw_sp_port,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	int err;
 
-	if (rtnl_dereference(mlxsw_sp_port->sample)) {
+	if (rtnl_dereference(mlxsw_sp_port->ing_sample)) {
 		NL_SET_ERR_MSG(extack, "Sampling already active on port");
 		return -EEXIST;
 	}
-	rcu_assign_pointer(mlxsw_sp_port->sample, &mall_entry->sample);
+	rcu_assign_pointer(mlxsw_sp_port->ing_sample, &mall_entry->sample);
 
 	err = mlxsw_sp->mall_ops->sample_add(mlxsw_sp, mlxsw_sp_port,
 					     mall_entry->ingress,
@@ -121,7 +121,7 @@ mlxsw_sp_mall_port_sample_add(struct mlxsw_sp_port *mlxsw_sp_port,
 	return 0;
 
 err_port_sample_set:
-	RCU_INIT_POINTER(mlxsw_sp_port->sample, NULL);
+	RCU_INIT_POINTER(mlxsw_sp_port->ing_sample, NULL);
 	return err;
 }
 
@@ -130,11 +130,11 @@ mlxsw_sp_mall_port_sample_del(struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 
-	if (!mlxsw_sp_port->sample)
+	if (!mlxsw_sp_port->ing_sample)
 		return;
 
 	mlxsw_sp->mall_ops->sample_del(mlxsw_sp, mlxsw_sp_port);
-	RCU_INIT_POINTER(mlxsw_sp_port->sample, NULL);
+	RCU_INIT_POINTER(mlxsw_sp_port->ing_sample, NULL);
 }
 
 static int
@@ -411,7 +411,7 @@ static int mlxsw_sp2_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 		return -EOPNOTSUPP;
 	}
 
-	sample = rtnl_dereference(mlxsw_sp_port->sample);
+	sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
 
 	err = mlxsw_sp_span_agent_get(mlxsw_sp, &sample->span_id, &agent_parms);
 	if (err) {
@@ -449,7 +449,7 @@ static void mlxsw_sp2_mall_sample_del(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_span_trigger_parms trigger_parms = {};
 	struct mlxsw_sp_port_sample *sample;
 
-	sample = rtnl_dereference(mlxsw_sp_port->sample);
+	sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
 
 	trigger_parms.span_id = sample->span_id;
 	mlxsw_sp_span_agent_unbind(mlxsw_sp, MLXSW_SP_SPAN_TRIGGER_INGRESS,
