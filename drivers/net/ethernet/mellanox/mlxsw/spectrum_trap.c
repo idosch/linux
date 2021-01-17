@@ -55,6 +55,8 @@ enum {
 	MLXSW_SP_MIRROR_REASON_INGRESS_WRED = 9,
 	/* Packet was ECN marked. */
 	MLXSW_SP_MIRROR_REASON_EGRESS_ECN = 13,
+	/* Packet was mirrored from egress. */
+	MLXSW_SP_MIRROR_REASON_EGRESS = 14,
 };
 
 static int mlxsw_sp_rx_listener(struct mlxsw_sp *mlxsw_sp, struct sk_buff *skb,
@@ -272,6 +274,47 @@ static void mlxsw_sp_rx_sample_listener(struct sk_buff *skb, u8 local_port,
 		goto out;
 
 	sample = rcu_dereference(mlxsw_sp_port->ing_sample);
+	if (!sample)
+		goto out;
+
+	/* The psample module expects skb->data to point to the start of the
+	 * Ethernet header.
+	 */
+	skb_push(skb, ETH_HLEN);
+	mlxsw_sp_psample_md_init(mlxsw_sp, &md, skb,
+				 mlxsw_sp_port->dev->ifindex, sample->truncate,
+				 sample->trunc_size);
+	psample_sample_packet(sample->psample_group, skb, sample->rate, &md);
+out:
+	consume_skb(skb);
+}
+
+static void mlxsw_sp_rx_sample_tx_listener(struct sk_buff *skb, u8 local_port,
+					   void *trap_ctx)
+{
+	struct mlxsw_rx_md_info *rx_md_info = &mlxsw_skb_cb(skb)->rx_md_info;
+	struct mlxsw_sp *mlxsw_sp = devlink_trap_ctx_priv(trap_ctx);
+	struct mlxsw_sp_port *mlxsw_sp_port, *mlxsw_sp_port_tx;
+	struct mlxsw_sp_port_sample *sample;
+	struct psample_metadata md = {};
+	int err;
+
+	err = __mlxsw_sp_rx_no_mark_listener(skb, local_port, trap_ctx);
+	if (err)
+		return;
+
+	mlxsw_sp_port = mlxsw_sp->ports[local_port];
+	if (!mlxsw_sp_port)
+		goto out;
+
+	/* Packet was sampled from Tx, so we need to retrieve the sample data
+	 * from the Tx port and not the Rx port.
+	 */
+	mlxsw_sp_port_tx = mlxsw_sp_sample_tx_port_get(mlxsw_sp, rx_md_info);
+	if (!mlxsw_sp_port_tx)
+		goto out;
+
+	sample = rcu_dereference(mlxsw_sp_port_tx->eg_sample);
 	if (!sample)
 		goto out;
 
@@ -1848,6 +1891,9 @@ mlxsw_sp2_trap_items_arr[] = {
 			MLXSW_RXL_MIRROR(mlxsw_sp_rx_sample_listener, 1,
 					 SP_PKT_SAMPLE,
 					 MLXSW_SP_MIRROR_REASON_INGRESS),
+			MLXSW_RXL_MIRROR(mlxsw_sp_rx_sample_tx_listener, 1,
+					 SP_PKT_SAMPLE,
+					 MLXSW_SP_MIRROR_REASON_EGRESS),
 		},
 	},
 };

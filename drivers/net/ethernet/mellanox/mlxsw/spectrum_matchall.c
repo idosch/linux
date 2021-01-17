@@ -100,9 +100,9 @@ static int mlxsw_sp_mall_port_sample_set(struct mlxsw_sp_port *mlxsw_sp_port,
 }
 
 static int
-mlxsw_sp_mall_port_sample_add(struct mlxsw_sp_port *mlxsw_sp_port,
-			      struct mlxsw_sp_mall_entry *mall_entry,
-			      struct netlink_ext_ack *extack)
+mlxsw_sp_mall_port_sample_ing_add(struct mlxsw_sp_port *mlxsw_sp_port,
+				  struct mlxsw_sp_mall_entry *mall_entry,
+				  struct netlink_ext_ack *extack)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	int err;
@@ -126,15 +126,76 @@ err_port_sample_set:
 }
 
 static void
-mlxsw_sp_mall_port_sample_del(struct mlxsw_sp_port *mlxsw_sp_port)
+mlxsw_sp_mall_port_sample_ing_del(struct mlxsw_sp_port *mlxsw_sp_port)
 {
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 
-	if (!mlxsw_sp_port->ing_sample)
+	if (!rtnl_dereference(mlxsw_sp_port->ing_sample))
 		return;
 
-	mlxsw_sp->mall_ops->sample_del(mlxsw_sp, mlxsw_sp_port);
+	mlxsw_sp->mall_ops->sample_del(mlxsw_sp, mlxsw_sp_port, true);
 	RCU_INIT_POINTER(mlxsw_sp_port->ing_sample, NULL);
+}
+
+static int
+mlxsw_sp_mall_port_sample_eg_add(struct mlxsw_sp_port *mlxsw_sp_port,
+				 struct mlxsw_sp_mall_entry *mall_entry,
+				 struct netlink_ext_ack *extack)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	int err;
+
+	if (rtnl_dereference(mlxsw_sp_port->eg_sample)) {
+		NL_SET_ERR_MSG(extack, "Sampling already active on port");
+		return -EEXIST;
+	}
+	rcu_assign_pointer(mlxsw_sp_port->eg_sample, &mall_entry->sample);
+
+	err = mlxsw_sp->mall_ops->sample_add(mlxsw_sp, mlxsw_sp_port,
+					     mall_entry->ingress,
+					     mall_entry->sample.rate, extack);
+	if (err)
+		goto err_port_sample_set;
+	return 0;
+
+err_port_sample_set:
+	RCU_INIT_POINTER(mlxsw_sp_port->eg_sample, NULL);
+	return err;
+}
+
+static void
+mlxsw_sp_mall_port_sample_eg_del(struct mlxsw_sp_port *mlxsw_sp_port)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+
+	if (!rtnl_dereference(mlxsw_sp_port->eg_sample))
+		return;
+
+	mlxsw_sp->mall_ops->sample_del(mlxsw_sp, mlxsw_sp_port, false);
+	RCU_INIT_POINTER(mlxsw_sp_port->eg_sample, NULL);
+}
+
+static int
+mlxsw_sp_mall_port_sample_add(struct mlxsw_sp_port *mlxsw_sp_port,
+			      struct mlxsw_sp_mall_entry *mall_entry,
+			      struct netlink_ext_ack *extack)
+{
+	if (mall_entry->ingress)
+		return mlxsw_sp_mall_port_sample_ing_add(mlxsw_sp_port,
+							 mall_entry, extack);
+	return mlxsw_sp_mall_port_sample_eg_add(mlxsw_sp_port, mall_entry,
+						extack);
+}
+
+static void
+mlxsw_sp_mall_port_sample_del(struct mlxsw_sp_port *mlxsw_sp_port,
+			      struct mlxsw_sp_mall_entry *mall_entry)
+{
+	if (mall_entry->ingress) {
+		mlxsw_sp_mall_port_sample_ing_del(mlxsw_sp_port);
+		return;
+	}
+	mlxsw_sp_mall_port_sample_eg_del(mlxsw_sp_port);
 }
 
 static int
@@ -164,7 +225,7 @@ mlxsw_sp_mall_port_rule_del(struct mlxsw_sp_port *mlxsw_sp_port,
 		mlxsw_sp_mall_port_mirror_del(mlxsw_sp_port, mall_entry);
 		break;
 	case MLXSW_SP_MALL_ACTION_TYPE_SAMPLE:
-		mlxsw_sp_mall_port_sample_del(mlxsw_sp_port);
+		mlxsw_sp_mall_port_sample_del(mlxsw_sp_port, mall_entry);
 		break;
 	default:
 		WARN_ON(1);
@@ -383,7 +444,8 @@ static int mlxsw_sp1_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 }
 
 static void mlxsw_sp1_mall_sample_del(struct mlxsw_sp *mlxsw_sp,
-				      struct mlxsw_sp_port *mlxsw_sp_port)
+				      struct mlxsw_sp_port *mlxsw_sp_port,
+				      bool ingress)
 {
 	mlxsw_sp_mall_port_sample_set(mlxsw_sp_port, false, 1);
 }
@@ -404,14 +466,16 @@ static int mlxsw_sp2_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 		.session_id = MLXSW_SP_SPAN_SESSION_ID_SAMPLING,
 	};
 	struct mlxsw_sp_port_sample *sample;
+	enum mlxsw_sp_span_trigger trigger;
 	int err;
 
-	if (!ingress) {
-		NL_SET_ERR_MSG(extack, "Sampling is not supported on egress");
-		return -EOPNOTSUPP;
+	if (ingress) {
+		sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
+		trigger = MLXSW_SP_SPAN_TRIGGER_INGRESS;
+	} else {
+		sample = rtnl_dereference(mlxsw_sp_port->eg_sample);
+		trigger = MLXSW_SP_SPAN_TRIGGER_EGRESS;
 	}
-
-	sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
 
 	err = mlxsw_sp_span_agent_get(mlxsw_sp, &sample->span_id, &agent_parms);
 	if (err) {
@@ -419,7 +483,7 @@ static int mlxsw_sp2_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 		return err;
 	}
 
-	err = mlxsw_sp_span_analyzed_port_get(mlxsw_sp_port, true);
+	err = mlxsw_sp_span_analyzed_port_get(mlxsw_sp_port, ingress);
 	if (err) {
 		NL_SET_ERR_MSG(extack, "Failed to get analyzed port");
 		goto err_analyzed_port_get;
@@ -427,8 +491,8 @@ static int mlxsw_sp2_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 
 	trigger_parms.span_id = sample->span_id;
 	trigger_parms.probability_rate = rate;
-	err = mlxsw_sp_span_agent_bind(mlxsw_sp, MLXSW_SP_SPAN_TRIGGER_INGRESS,
-				       mlxsw_sp_port, &trigger_parms);
+	err = mlxsw_sp_span_agent_bind(mlxsw_sp, trigger, mlxsw_sp_port,
+				       &trigger_parms);
 	if (err) {
 		NL_SET_ERR_MSG(extack, "Failed to bind SPAN agent");
 		goto err_agent_bind;
@@ -437,24 +501,32 @@ static int mlxsw_sp2_mall_sample_add(struct mlxsw_sp *mlxsw_sp,
 	return 0;
 
 err_agent_bind:
-	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, true);
+	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, ingress);
 err_analyzed_port_get:
 	mlxsw_sp_span_agent_put(mlxsw_sp, sample->span_id);
 	return err;
 }
 
 static void mlxsw_sp2_mall_sample_del(struct mlxsw_sp *mlxsw_sp,
-				      struct mlxsw_sp_port *mlxsw_sp_port)
+				      struct mlxsw_sp_port *mlxsw_sp_port,
+				      bool ingress)
 {
 	struct mlxsw_sp_span_trigger_parms trigger_parms = {};
 	struct mlxsw_sp_port_sample *sample;
+	enum mlxsw_sp_span_trigger trigger;
 
-	sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
+	if (ingress) {
+		sample = rtnl_dereference(mlxsw_sp_port->ing_sample);
+		trigger = MLXSW_SP_SPAN_TRIGGER_INGRESS;
+	} else {
+		sample = rtnl_dereference(mlxsw_sp_port->eg_sample);
+		trigger = MLXSW_SP_SPAN_TRIGGER_EGRESS;
+	}
 
 	trigger_parms.span_id = sample->span_id;
-	mlxsw_sp_span_agent_unbind(mlxsw_sp, MLXSW_SP_SPAN_TRIGGER_INGRESS,
-				   mlxsw_sp_port, &trigger_parms);
-	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, true);
+	mlxsw_sp_span_agent_unbind(mlxsw_sp, trigger, mlxsw_sp_port,
+				   &trigger_parms);
+	mlxsw_sp_span_analyzed_port_put(mlxsw_sp_port, ingress);
 	mlxsw_sp_span_agent_put(mlxsw_sp, sample->span_id);
 }
 

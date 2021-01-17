@@ -306,6 +306,7 @@ struct mlxsw_sp_port {
 		struct delayed_work update_dw;
 	} periodic_hw_stats;
 	struct mlxsw_sp_port_sample __rcu *ing_sample;
+	struct mlxsw_sp_port_sample __rcu *eg_sample;
 	struct list_head vlans_list;
 	struct mlxsw_sp_port_vlan *default_vlan;
 	struct mlxsw_sp_qdisc_state *qdisc;
@@ -1038,7 +1039,7 @@ struct mlxsw_sp_mall_ops {
 			  struct mlxsw_sp_port *mlxsw_sp_port, bool ingress,
 			  u32 rate, struct netlink_ext_ack *extack);
 	void (*sample_del)(struct mlxsw_sp *mlxsw_sp,
-			   struct mlxsw_sp_port *mlxsw_sp_port);
+			   struct mlxsw_sp_port *mlxsw_sp_port, bool ingress);
 };
 
 extern const struct mlxsw_sp_mall_ops mlxsw_sp1_mall_ops;
