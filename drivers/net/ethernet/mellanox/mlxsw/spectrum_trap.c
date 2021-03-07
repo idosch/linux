@@ -392,6 +392,25 @@ static void mlxsw_sp_rx_sample_acl_listener(struct sk_buff *skb, u8 local_port,
 	mlxsw_sp_rx_sample_global_listener(skb, local_port, trap_ctx, type);
 }
 
+static void mlxsw_sp_rx_sample_early_drop_listener(struct sk_buff *skb,
+						   u8 local_port,
+						   void *trap_ctx)
+{
+	enum mlxsw_sp_sample_trigger_type type;
+
+	type = MLXSW_SP_SAMPLE_TRIGGER_TYPE_EARLY_DROP;
+	mlxsw_sp_rx_sample_global_listener(skb, local_port, trap_ctx, type);
+}
+
+static void mlxsw_sp_rx_sample_ecn_listener(struct sk_buff *skb, u8 local_port,
+					    void *trap_ctx)
+{
+	enum mlxsw_sp_sample_trigger_type type;
+
+	type = MLXSW_SP_SAMPLE_TRIGGER_TYPE_ECN;
+	mlxsw_sp_rx_sample_global_listener(skb, local_port, trap_ctx, type);
+}
+
 #define MLXSW_SP_TRAP_DROP(_id, _group_id)				      \
 	DEVLINK_TRAP_GENERIC(DROP, DROP, _id,				      \
 			     DEVLINK_TRAP_GROUP_GENERIC_ID_##_group_id,	      \
@@ -1944,6 +1963,9 @@ mlxsw_sp2_trap_items_arr[] = {
 		.trap = MLXSW_SP_TRAP_BUFFER_DROP(EARLY_DROP),
 		.listeners_arr = {
 			MLXSW_SP_RXL_BUFFER_DISCARD(INGRESS_WRED),
+			MLXSW_RXL_MIRROR(mlxsw_sp_rx_sample_early_drop_listener,
+					 2, SP_BUFFER_DISCARDS,
+					 MLXSW_SP_MIRROR_REASON_INGRESS_WRED),
 		},
 		.is_source = true,
 	},
@@ -1966,6 +1988,9 @@ mlxsw_sp2_trap_items_arr[] = {
 		.trap = MLXSW_SP_TRAP_BUFFER_DROP(ECN_MARK),
 		.listeners_arr = {
 			MLXSW_SP_RXL_BUFFER_DISCARD(EGRESS_ECN),
+			MLXSW_RXL_MIRROR(mlxsw_sp_rx_sample_ecn_listener, 2,
+					 SP_BUFFER_DISCARDS,
+					 MLXSW_SP_MIRROR_REASON_EGRESS_ECN),
 		},
 		.is_source = true,
 	},
