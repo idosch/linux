@@ -87,6 +87,11 @@ enum mlxsw_sp_rif_type {
 	MLXSW_SP_RIF_TYPE_MAX,
 };
 
+struct mlxsw_sp_switchdev_ops;
+
+extern const struct mlxsw_sp_switchdev_ops mlxsw_sp1_switchdev_ops;
+extern const struct mlxsw_sp_switchdev_ops mlxsw_sp2_switchdev_ops;
+
 struct mlxsw_sp_router_ops;
 
 extern const struct mlxsw_sp_router_ops mlxsw_sp1_router_ops;
@@ -167,6 +172,7 @@ struct mlxsw_sp {
 	struct mlxsw_sp_counter_pool *counter_pool;
 	struct mlxsw_sp_span *span;
 	struct mlxsw_sp_trap *trap;
+	const struct mlxsw_sp_switchdev_ops *switchdev_ops;
 	const struct mlxsw_sp_kvdl_ops *kvdl_ops;
 	const struct mlxsw_afa_ops *afa_ops;
 	const struct mlxsw_afk_ops *afk_ops;
