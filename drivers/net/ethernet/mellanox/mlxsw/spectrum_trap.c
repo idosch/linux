@@ -345,12 +345,14 @@ out:
 	consume_skb(skb);
 }
 
-static void mlxsw_sp_rx_sample_acl_listener(struct sk_buff *skb, u8 local_port,
-					    void *trap_ctx)
+static void
+mlxsw_sp_rx_sample_global_listener(struct sk_buff *skb, u8 local_port,
+				   void *trap_ctx,
+				   enum mlxsw_sp_sample_trigger_type type)
 {
 	struct mlxsw_sp *mlxsw_sp = devlink_trap_ctx_priv(trap_ctx);
 	struct mlxsw_sp_sample_trigger trigger = {
-		.type = MLXSW_SP_SAMPLE_TRIGGER_TYPE_POLICY_ENGINE,
+		.type = type,
 	};
 	struct mlxsw_sp_sample_params *params;
 	struct mlxsw_sp_port *mlxsw_sp_port;
@@ -379,6 +381,15 @@ static void mlxsw_sp_rx_sample_acl_listener(struct sk_buff *skb, u8 local_port,
 	psample_sample_packet(params->psample_group, skb, params->rate, &md);
 out:
 	consume_skb(skb);
+}
+
+static void mlxsw_sp_rx_sample_acl_listener(struct sk_buff *skb, u8 local_port,
+					    void *trap_ctx)
+{
+	enum mlxsw_sp_sample_trigger_type type;
+
+	type = MLXSW_SP_SAMPLE_TRIGGER_TYPE_POLICY_ENGINE;
+	mlxsw_sp_rx_sample_global_listener(skb, local_port, trap_ctx, type);
 }
 
 #define MLXSW_SP_TRAP_DROP(_id, _group_id)				      \
