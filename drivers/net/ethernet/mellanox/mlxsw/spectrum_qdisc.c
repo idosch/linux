@@ -1434,6 +1434,85 @@ static void mlxsw_sp_qevent_trap_deconfigure(struct mlxsw_sp *mlxsw_sp,
 }
 
 static int
+mlxsw_sp_qevent_span_sample_trigger(enum mlxsw_sp_span_trigger span_trigger,
+				    enum mlxsw_sp_sample_trigger_type *p_sample_trigger)
+{
+	switch (span_trigger) {
+	case MLXSW_SP_SPAN_TRIGGER_EARLY_DROP:
+		*p_sample_trigger = MLXSW_SP_SAMPLE_TRIGGER_TYPE_EARLY_DROP;
+		return 0;
+	case MLXSW_SP_SPAN_TRIGGER_ECN:
+		*p_sample_trigger = MLXSW_SP_SAMPLE_TRIGGER_TYPE_ECN;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int
+mlxsw_sp_qevent_sample_configure(struct mlxsw_sp *mlxsw_sp,
+				 struct mlxsw_sp_mall_entry *mall_entry,
+				 struct mlxsw_sp_qevent_binding *qevent_binding,
+				 struct netlink_ext_ack *extack)
+{
+	u16 group_id = DEVLINK_TRAP_GROUP_GENERIC_ID_BUFFER_DROPS;
+	struct mlxsw_sp_span_agent_parms agent_parms = {
+		.session_id = MLXSW_SP_SPAN_SESSION_ID_BUFFER_SAMPLING,
+	};
+	struct mlxsw_sp_sample_trigger sample_trigger = {};
+	int err;
+
+	err = mlxsw_sp_qevent_span_sample_trigger(qevent_binding->span_trigger,
+						  &sample_trigger.type);
+	if (err)
+		return err;
+
+	err = mlxsw_sp_sample_trigger_params_set(mlxsw_sp, &sample_trigger,
+						 &mall_entry->sample.params,
+						 extack);
+	if (err)
+		return err;
+
+	err = mlxsw_sp_trap_group_policer_hw_id_get(mlxsw_sp, group_id,
+						    &agent_parms.policer_enable,
+						    &agent_parms.policer_id);
+	if (err)
+		goto err_policer_hw_id_get;
+
+	err = mlxsw_sp_qevent_span_configure(mlxsw_sp, mall_entry,
+					     qevent_binding, &agent_parms,
+					     &mall_entry->sample.span_id,
+					     mall_entry->sample.params.rate);
+	if (err)
+		goto err_span_configure;
+
+	return 0;
+
+err_span_configure:
+err_policer_hw_id_get:
+	mlxsw_sp_sample_trigger_params_unset(mlxsw_sp, &sample_trigger);
+	return err;
+}
+
+static void
+mlxsw_sp_qevent_sample_deconfigure(struct mlxsw_sp *mlxsw_sp,
+				   struct mlxsw_sp_mall_entry *mall_entry,
+				   struct mlxsw_sp_qevent_binding *qevent_binding)
+{
+	struct mlxsw_sp_sample_trigger sample_trigger = {};
+	int err;
+
+	err = mlxsw_sp_qevent_span_sample_trigger(qevent_binding->span_trigger,
+						  &sample_trigger.type);
+	if (WARN_ON(err))
+		return;
+
+	mlxsw_sp_qevent_span_deconfigure(mlxsw_sp, qevent_binding,
+					 mall_entry->sample.span_id);
+	mlxsw_sp_sample_trigger_params_unset(mlxsw_sp, &sample_trigger);
+}
+
+static int
 mlxsw_sp_qevent_entry_configure(struct mlxsw_sp *mlxsw_sp,
 				struct mlxsw_sp_mall_entry *mall_entry,
 				struct mlxsw_sp_qevent_binding *qevent_binding,
@@ -1450,6 +1529,9 @@ mlxsw_sp_qevent_entry_configure(struct mlxsw_sp *mlxsw_sp,
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP:
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD:
 		return mlxsw_sp_qevent_trap_configure(mlxsw_sp, mall_entry, qevent_binding);
+	case MLXSW_SP_MALL_ACTION_TYPE_SAMPLE:
+		return mlxsw_sp_qevent_sample_configure(mlxsw_sp, mall_entry,
+							qevent_binding, extack);
 	default:
 		/* This should have been validated away. */
 		WARN_ON(1);
@@ -1467,6 +1549,9 @@ static void mlxsw_sp_qevent_entry_deconfigure(struct mlxsw_sp *mlxsw_sp,
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP:
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD:
 		return mlxsw_sp_qevent_trap_deconfigure(mlxsw_sp, mall_entry, qevent_binding);
+	case MLXSW_SP_MALL_ACTION_TYPE_SAMPLE:
+		return mlxsw_sp_qevent_sample_deconfigure(mlxsw_sp, mall_entry,
+							  qevent_binding);
 	default:
 		WARN_ON(1);
 		return;
@@ -1596,6 +1681,12 @@ static int mlxsw_sp_qevent_mall_replace(struct mlxsw_sp *mlxsw_sp,
 		mall_entry->type = MLXSW_SP_MALL_ACTION_TYPE_TRAP;
 	} else if (act->id == FLOW_ACTION_TRAP_FWD) {
 		mall_entry->type = MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD;
+	} else if (act->id == FLOW_ACTION_SAMPLE) {
+		mall_entry->type = MLXSW_SP_MALL_ACTION_TYPE_SAMPLE;
+		mall_entry->sample.params.psample_group = act->sample.psample_group;
+		mall_entry->sample.params.truncate = act->sample.truncate;
+		mall_entry->sample.params.trunc_size = act->sample.trunc_size;
+		mall_entry->sample.params.rate = act->sample.rate;
 	} else {
 		NL_SET_ERR_MSG(f->common.extack, "Unsupported action");
 		err = -EOPNOTSUPP;
@@ -1862,7 +1953,8 @@ int mlxsw_sp_setup_tc_block_qevent_early_drop(struct mlxsw_sp_port *mlxsw_sp_por
 					      struct flow_block_offload *f)
 {
 	unsigned int action_mask = BIT(MLXSW_SP_MALL_ACTION_TYPE_MIRROR) |
-				   BIT(MLXSW_SP_MALL_ACTION_TYPE_TRAP);
+				   BIT(MLXSW_SP_MALL_ACTION_TYPE_TRAP) |
+				   BIT(MLXSW_SP_MALL_ACTION_TYPE_SAMPLE);
 
 	return mlxsw_sp_setup_tc_block_qevent(mlxsw_sp_port, f,
 					      MLXSW_SP_SPAN_TRIGGER_EARLY_DROP,
@@ -1873,7 +1965,8 @@ int mlxsw_sp_setup_tc_block_qevent_mark(struct mlxsw_sp_port *mlxsw_sp_port,
 					struct flow_block_offload *f)
 {
 	unsigned int action_mask = BIT(MLXSW_SP_MALL_ACTION_TYPE_MIRROR) |
-				   BIT(MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD);
+				   BIT(MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD) |
+				   BIT(MLXSW_SP_MALL_ACTION_TYPE_SAMPLE);
 
 	return mlxsw_sp_setup_tc_block_qevent(mlxsw_sp_port, f,
 					      MLXSW_SP_SPAN_TRIGGER_ECN,
