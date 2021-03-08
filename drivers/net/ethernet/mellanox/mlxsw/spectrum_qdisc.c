@@ -1326,7 +1326,7 @@ static int mlxsw_sp_qevent_span_configure(struct mlxsw_sp *mlxsw_sp,
 					  struct mlxsw_sp_mall_entry *mall_entry,
 					  struct mlxsw_sp_qevent_binding *qevent_binding,
 					  const struct mlxsw_sp_span_agent_parms *agent_parms,
-					  int *p_span_id)
+					  int *p_span_id, u32 probability_rate)
 {
 	bool ingress = mlxsw_sp_span_trigger_is_ingress(qevent_binding->span_trigger);
 	struct mlxsw_sp_port *mlxsw_sp_port = qevent_binding->mlxsw_sp_port;
@@ -1343,7 +1343,7 @@ static int mlxsw_sp_qevent_span_configure(struct mlxsw_sp *mlxsw_sp,
 		goto err_analyzed_port_get;
 
 	trigger_parms.span_id = span_id;
-	trigger_parms.probability_rate = 1;
+	trigger_parms.probability_rate = probability_rate;
 	err = mlxsw_sp_span_agent_bind(mlxsw_sp, qevent_binding->span_trigger, mlxsw_sp_port,
 				       &trigger_parms);
 	if (err)
@@ -1394,7 +1394,8 @@ static int mlxsw_sp_qevent_mirror_configure(struct mlxsw_sp *mlxsw_sp,
 	};
 
 	return mlxsw_sp_qevent_span_configure(mlxsw_sp, mall_entry, qevent_binding,
-					      &agent_parms, &mall_entry->mirror.span_id);
+					      &agent_parms, &mall_entry->mirror.span_id,
+					      1);
 }
 
 static void mlxsw_sp_qevent_mirror_deconfigure(struct mlxsw_sp *mlxsw_sp,
@@ -1421,7 +1422,8 @@ static int mlxsw_sp_qevent_trap_configure(struct mlxsw_sp *mlxsw_sp,
 		return err;
 
 	return mlxsw_sp_qevent_span_configure(mlxsw_sp, mall_entry, qevent_binding,
-					      &agent_parms, &mall_entry->trap.span_id);
+					      &agent_parms, &mall_entry->trap.span_id,
+					      1);
 }
 
 static void mlxsw_sp_qevent_trap_deconfigure(struct mlxsw_sp *mlxsw_sp,
