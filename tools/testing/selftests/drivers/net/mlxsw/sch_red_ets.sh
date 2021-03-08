@@ -9,8 +9,10 @@ ALL_TESTS="
 	mc_backlog_test
 	red_mirror_test
 	red_trap_test
+	red_sample_test
 	ecn_trap_test
 	ecn_mirror_test
+	ecn_sample_test
 "
 : ${QDISC:=ets}
 source sch_red_core.sh
@@ -139,6 +141,16 @@ red_trap_test()
 	uninstall_qdisc
 }
 
+red_sample_test()
+{
+	install_qdisc qevent early_drop block 10
+
+	do_drop_sample_test 10 $BACKLOG1 early_drop
+	do_drop_sample_test 11 $BACKLOG2 early_drop
+
+	uninstall_qdisc
+}
+
 ecn_mirror_test()
 {
 	install_qdisc ecn qevent mark block 10
@@ -167,6 +179,16 @@ ecn_trap_test()
 	uninstall_qdisc_tc1
 	uninstall_qdisc_tc0
 	uninstall_root_qdisc
+}
+
+ecn_sample_test()
+{
+	install_qdisc ecn qevent mark block 10
+
+	do_mark_sample_test 10 $BACKLOG1
+	do_mark_sample_test 11 $BACKLOG2
+
+	uninstall_qdisc
 }
 
 trap cleanup EXIT

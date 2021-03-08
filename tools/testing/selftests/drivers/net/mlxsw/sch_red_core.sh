@@ -746,3 +746,42 @@ do_mark_trap_test_fail()
 {
 	do_mark_trap_test "$@" 1
 }
+
+qevent_rule_install_sample()
+{
+	tc filter add block 10 pref 1234 handle 102 matchall skip_sw \
+	   action sample group 4321 rate 1 trunc 64 hw_stats disabled
+}
+
+qevent_rule_uninstall_sample()
+{
+	tc filter del block 10 pref 1234 handle 102 matchall
+}
+
+qevent_counter_fetch_sample()
+{
+	local trap_name=$1; shift
+
+	devlink_trap_rx_packets_get "$trap_name"
+}
+
+do_drop_sample_test()
+{
+	local vlan=$1; shift
+	local limit=$1; shift
+	local trap_name=$1; shift
+
+	do_drop_test "$vlan" "$limit" "$trap_name" sample \
+		     "qevent_counter_fetch_sample $trap_name"
+}
+
+do_mark_sample_test()
+{
+	local vlan=$1; shift
+	local limit=$1; shift
+	local should_fail=$1; shift
+
+	do_mark_test "$vlan" "$limit" sample \
+		     "qevent_counter_fetch_sample ecn_mark" \
+		     "$should_fail"
+}
