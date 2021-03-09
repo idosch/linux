@@ -1598,6 +1598,7 @@ mlxsw_sp_qevent_entry_configure(struct mlxsw_sp *mlxsw_sp,
 	case MLXSW_SP_MALL_ACTION_TYPE_MIRROR:
 		return mlxsw_sp_qevent_mirror_configure(mlxsw_sp, mall_entry, qevent_binding);
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP:
+	case MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD:
 		return mlxsw_sp_qevent_trap_configure(mlxsw_sp, mall_entry, qevent_binding);
 	default:
 		/* This should have been validated away. */
@@ -1614,6 +1615,7 @@ static void mlxsw_sp_qevent_entry_deconfigure(struct mlxsw_sp *mlxsw_sp,
 	case MLXSW_SP_MALL_ACTION_TYPE_MIRROR:
 		return mlxsw_sp_qevent_mirror_deconfigure(mlxsw_sp, mall_entry, qevent_binding);
 	case MLXSW_SP_MALL_ACTION_TYPE_TRAP:
+	case MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD:
 		return mlxsw_sp_qevent_trap_deconfigure(mlxsw_sp, mall_entry, qevent_binding);
 	default:
 		WARN_ON(1);
@@ -1742,6 +1744,8 @@ static int mlxsw_sp_qevent_mall_replace(struct mlxsw_sp *mlxsw_sp,
 		mall_entry->mirror.to_dev = act->dev;
 	} else if (act->id == FLOW_ACTION_TRAP) {
 		mall_entry->type = MLXSW_SP_MALL_ACTION_TYPE_TRAP;
+	} else if (act->id == FLOW_ACTION_TRAP_FWD) {
+		mall_entry->type = MLXSW_SP_MALL_ACTION_TYPE_TRAP_FWD;
 	} else {
 		NL_SET_ERR_MSG(f->common.extack, "Unsupported action");
 		err = -EOPNOTSUPP;
