@@ -913,7 +913,12 @@ static int __mlxsw_sp_nve_ecn_decap_init(struct mlxsw_sp *mlxsw_sp,
 	u8 new_inner_ecn;
 
 	trap_en = !!__INET_ECN_decapsulate(outer_ecn, inner_ecn, &set_ce);
-	new_inner_ecn = set_ce ? INET_ECN_CE : inner_ecn;
+	if (set_ce)
+		new_inner_ecn = INET_ECN_CE;
+	else if (outer_ecn == INET_ECN_ECT_1)
+		new_inner_ecn = INET_ECN_ECT_1;
+	else
+		new_inner_ecn = inner_ecn;
 
 	mlxsw_reg_tndem_pack(tndem_pl, outer_ecn, inner_ecn, new_inner_ecn,
 			     trap_en, trap_en ? MLXSW_TRAP_ID_DECAP_ECN0 : 0);
