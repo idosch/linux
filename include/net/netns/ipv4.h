@@ -210,6 +210,10 @@ struct netns_ipv4 {
 #endif
 #endif
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
+	unsigned long *sysctl_fib_multipath_hash_fields;
+	u8 fib_multipath_hash_fields_need_outer:1,
+	   fib_multipath_hash_fields_need_inner:1,
+	   unused:6;
 	u8 sysctl_fib_multipath_use_neigh;
 	u8 sysctl_fib_multipath_hash_policy;
 #endif

@@ -1516,6 +1516,23 @@ static int __net_init ip_fib_net_init(struct net *net)
 	if (err)
 		return err;
 
+#ifdef CONFIG_IP_ROUTE_MULTIPATH
+	net->ipv4.sysctl_fib_multipath_hash_fields =
+		bitmap_zalloc(__FIB_MULTIPATH_HASH_FIELD_CNT, GFP_KERNEL);
+	if (!net->ipv4.sysctl_fib_multipath_hash_fields)
+		goto err_hash_fields_alloc;
+
+	/* Default to 3-tuple */
+	set_bit(FIB_MULTIPATH_HASH_FIELD_SRC_IP,
+		net->ipv4.sysctl_fib_multipath_hash_fields);
+	set_bit(FIB_MULTIPATH_HASH_FIELD_DST_IP,
+		net->ipv4.sysctl_fib_multipath_hash_fields);
+	set_bit(FIB_MULTIPATH_HASH_FIELD_IP_PROTO,
+		net->ipv4.sysctl_fib_multipath_hash_fields);
+	net->ipv4.fib_multipath_hash_fields_need_outer = 1;
+	net->ipv4.fib_multipath_hash_fields_need_inner = 0;
+#endif
+
 	/* Avoid false sharing : Use at least a full cache line */
 	size = max_t(size_t, size, L1_CACHE_BYTES);
 
@@ -1533,6 +1550,10 @@ static int __net_init ip_fib_net_init(struct net *net)
 err_rules_init:
 	kfree(net->ipv4.fib_table_hash);
 err_table_hash_alloc:
+#ifdef CONFIG_IP_ROUTE_MULTIPATH
+	bitmap_free(net->ipv4.sysctl_fib_multipath_hash_fields);
+err_hash_fields_alloc:
+#endif
 	fib4_notifier_exit(net);
 	return err;
 }
@@ -1568,6 +1589,9 @@ static void ip_fib_net_exit(struct net *net)
 #endif
 	rtnl_unlock();
 	kfree(net->ipv4.fib_table_hash);
+#ifdef CONFIG_IP_ROUTE_MULTIPATH
+	bitmap_free(net->ipv4.sysctl_fib_multipath_hash_fields);
+#endif
 	fib4_notifier_exit(net);
 }
 

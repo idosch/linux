@@ -100,6 +100,35 @@ fib_multipath_hash_policy - INTEGER
 	- 1 - Layer 4
 	- 2 - Layer 3 or inner Layer 3 if present
 
+fib_multipath_hash_fields - list of comma separated ranges
+	When fib_multipath_hash_policy is set to 3 (custom multipath hash), the
+	fields used for multipath hash calculation are determined by this
+	sysctl.
+
+	The format used for both input and output is a comma separated list of
+	ranges (e.g., "0-2" for source IP, destination IP and IP protocol).
+	Writing to the file will clear all previous ranges and update the
+	current list with the input.
+
+	Possible fields are:
+
+	== ============================
+	 0 Source IP address
+	 1 Destination IP address
+	 2 IP protocol
+	 3 Unused
+	 4 Source port
+	 5 Destination port
+	 6 Inner source IP address
+	 7 Inner destination IP address
+	 8 Inner IP protocol
+	 9 Inner Flow Label
+	10 Inner source port
+	11 Inner destination port
+	== ============================
+
+	Default: 0-2 (source IP, destination IP and IP protocol)
+
 fib_sync_mem - UNSIGNED INTEGER
 	Amount of dirty memory from fib entries that can be backlogged before
 	synchronize_rcu is forced.

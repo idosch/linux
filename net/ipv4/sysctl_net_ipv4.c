@@ -19,6 +19,7 @@
 #include <net/snmp.h>
 #include <net/icmp.h>
 #include <net/ip.h>
+#include <net/ip_fib.h>
 #include <net/route.h>
 #include <net/tcp.h>
 #include <net/udp.h>
@@ -459,6 +460,30 @@ static int proc_fib_multipath_hash_policy(struct ctl_table *table, int write,
 	if (write && ret == 0)
 		call_netevent_notifiers(NETEVENT_IPV4_MPATH_HASH_UPDATE, net);
 
+	return ret;
+}
+
+static int proc_fib_multipath_hash_fields(struct ctl_table *table, int write,
+					  void *buffer, size_t *lenp,
+					  loff_t *ppos)
+{
+	unsigned long *hash_fields;
+	struct net *net;
+	int ret;
+
+	net = container_of(table->data, struct net,
+			   ipv4.sysctl_fib_multipath_hash_fields);
+	ret = proc_do_large_bitmap(table, write, buffer, lenp, ppos);
+	if (!write || ret)
+		goto out;
+
+	hash_fields = net->ipv4.sysctl_fib_multipath_hash_fields;
+	net->ipv4.fib_multipath_hash_fields_need_outer =
+		fib_multipath_hash_need_outer(hash_fields);
+	net->ipv4.fib_multipath_hash_fields_need_inner =
+		fib_multipath_hash_need_inner(hash_fields);
+
+out:
 	return ret;
 }
 #endif
@@ -1051,6 +1076,13 @@ static struct ctl_table ipv4_net_table[] = {
 		.proc_handler	= proc_fib_multipath_hash_policy,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two,
+	},
+	{
+		.procname	= "fib_multipath_hash_fields",
+		.data		= &init_net.ipv4.sysctl_fib_multipath_hash_fields,
+		.maxlen		= __FIB_MULTIPATH_HASH_FIELD_CNT,
+		.mode		= 0644,
+		.proc_handler	= proc_fib_multipath_hash_fields,
 	},
 #endif
 	{

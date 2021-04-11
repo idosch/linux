@@ -466,6 +466,52 @@ int fib_sync_up(struct net_device *dev, unsigned char nh_flags);
 void fib_sync_mtu(struct net_device *dev, u32 orig_mtu);
 void fib_nhc_update_mtu(struct fib_nh_common *nhc, u32 new, u32 orig);
 
+/* Fields used for sysctl_fib_multipath_hash_fields.
+ * Common to IPv4 and IPv6.
+ */
+enum {
+	FIB_MULTIPATH_HASH_FIELD_SRC_IP,
+	FIB_MULTIPATH_HASH_FIELD_DST_IP,
+	FIB_MULTIPATH_HASH_FIELD_IP_PROTO,
+	FIB_MULTIPATH_HASH_FIELD_FLOWLABEL,
+	FIB_MULTIPATH_HASH_FIELD_SRC_PORT,
+	FIB_MULTIPATH_HASH_FIELD_DST_PORT,
+	FIB_MULTIPATH_HASH_FIELD_INNER_SRC_IP,
+	FIB_MULTIPATH_HASH_FIELD_INNER_DST_IP,
+	FIB_MULTIPATH_HASH_FIELD_INNER_IP_PROTO,
+	FIB_MULTIPATH_HASH_FIELD_INNER_FLOWLABEL,
+	FIB_MULTIPATH_HASH_FIELD_INNER_SRC_PORT,
+	FIB_MULTIPATH_HASH_FIELD_INNER_DST_PORT,
+
+	/* Add new fields above. This is user API. */
+	__FIB_MULTIPATH_HASH_FIELD_CNT,
+};
+
+#define FIB_MULTIPATH_HASH_TEST_FIELD(_field, _hash_fields)		      \
+	test_bit(FIB_MULTIPATH_HASH_FIELD_##_field, _hash_fields)
+
+static inline bool
+fib_multipath_hash_need_outer(const unsigned long *hash_fields)
+{
+	return FIB_MULTIPATH_HASH_TEST_FIELD(SRC_IP, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(DST_IP, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(IP_PROTO, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(FLOWLABEL, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(SRC_PORT, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(DST_PORT, hash_fields);
+}
+
+static inline bool
+fib_multipath_hash_need_inner(const unsigned long *hash_fields)
+{
+	return FIB_MULTIPATH_HASH_TEST_FIELD(INNER_SRC_IP, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(INNER_DST_IP, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(INNER_IP_PROTO, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(INNER_FLOWLABEL, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(INNER_SRC_PORT, hash_fields) ||
+	       FIB_MULTIPATH_HASH_TEST_FIELD(INNER_DST_PORT, hash_fields);
+}
+
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 		       const struct sk_buff *skb, struct flow_keys *flkeys);
