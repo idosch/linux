@@ -32,6 +32,7 @@
 #include <net/lwtunnel.h>
 #include <net/fib_notifier.h>
 
+#include <net/ip_fib.h>
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>
 
@@ -2355,6 +2356,21 @@ static int __net_init fib6_net_init(struct net *net)
 	if (err)
 		return err;
 
+	net->ipv6.sysctl.multipath_hash_fields =
+		bitmap_zalloc(__FIB_MULTIPATH_HASH_FIELD_CNT, GFP_KERNEL);
+	if (!net->ipv6.sysctl.multipath_hash_fields)
+		goto out_notifier;
+
+	/* Default to 3-tuple */
+	set_bit(FIB_MULTIPATH_HASH_FIELD_SRC_IP,
+		net->ipv6.sysctl.multipath_hash_fields);
+	set_bit(FIB_MULTIPATH_HASH_FIELD_DST_IP,
+		net->ipv6.sysctl.multipath_hash_fields);
+	set_bit(FIB_MULTIPATH_HASH_FIELD_IP_PROTO,
+		net->ipv6.sysctl.multipath_hash_fields);
+	net->ipv6.sysctl.multipath_hash_fields_need_outer = 1;
+	net->ipv6.sysctl.multipath_hash_fields_need_inner = 0;
+
 	spin_lock_init(&net->ipv6.fib6_gc_lock);
 	rwlock_init(&net->ipv6.fib6_walker_lock);
 	INIT_LIST_HEAD(&net->ipv6.fib6_walkers);
@@ -2362,7 +2378,7 @@ static int __net_init fib6_net_init(struct net *net)
 
 	net->ipv6.rt6_stats = kzalloc(sizeof(*net->ipv6.rt6_stats), GFP_KERNEL);
 	if (!net->ipv6.rt6_stats)
-		goto out_notifier;
+		goto out_hash_fields;
 
 	/* Avoid false sharing : Use at least a full cache line */
 	size = max_t(size_t, size, L1_CACHE_BYTES);
@@ -2407,6 +2423,8 @@ out_fib_table_hash:
 	kfree(net->ipv6.fib_table_hash);
 out_rt6_stats:
 	kfree(net->ipv6.rt6_stats);
+out_hash_fields:
+	bitmap_free(net->ipv6.sysctl.multipath_hash_fields);
 out_notifier:
 	fib6_notifier_exit(net);
 	return -ENOMEM;
@@ -2431,6 +2449,7 @@ static void fib6_net_exit(struct net *net)
 
 	kfree(net->ipv6.fib_table_hash);
 	kfree(net->ipv6.rt6_stats);
+	bitmap_free(net->ipv6.sysctl.multipath_hash_fields);
 	fib6_notifier_exit(net);
 }
 

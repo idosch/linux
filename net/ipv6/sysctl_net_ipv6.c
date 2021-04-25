@@ -17,6 +17,7 @@
 #include <net/addrconf.h>
 #include <net/inet_frag.h>
 #include <net/netevent.h>
+#include <net/ip_fib.h>
 #ifdef CONFIG_NETLABEL
 #include <net/calipso.h>
 #endif
@@ -37,6 +38,30 @@ static int proc_rt6_multipath_hash_policy(struct ctl_table *table, int write,
 	if (write && ret == 0)
 		call_netevent_notifiers(NETEVENT_IPV6_MPATH_HASH_UPDATE, net);
 
+	return ret;
+}
+
+static int
+proc_rt6_multipath_hash_fields(struct ctl_table *table, int write, void *buffer,
+			       size_t *lenp, loff_t *ppos)
+{
+	unsigned long *hash_fields;
+	struct net *net;
+	int ret;
+
+	net = container_of(table->data, struct net,
+			   ipv6.sysctl.multipath_hash_fields);
+	ret = proc_do_large_bitmap(table, write, buffer, lenp, ppos);
+	if (!write || ret)
+		goto out;
+
+	hash_fields = net->ipv6.sysctl.multipath_hash_fields;
+	net->ipv6.sysctl.multipath_hash_fields_need_outer =
+		fib_multipath_hash_need_outer(hash_fields);
+	net->ipv6.sysctl.multipath_hash_fields_need_inner =
+		fib_multipath_hash_need_inner(hash_fields);
+
+out:
 	return ret;
 }
 
@@ -150,6 +175,13 @@ static struct ctl_table ipv6_table_template[] = {
 		.proc_handler   = proc_rt6_multipath_hash_policy,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &two,
+	},
+	{
+		.procname	= "fib_multipath_hash_fields",
+		.data		= &init_net.ipv6.sysctl.multipath_hash_fields,
+		.maxlen		= __FIB_MULTIPATH_HASH_FIELD_CNT,
+		.mode		= 0644,
+		.proc_handler	= proc_rt6_multipath_hash_fields,
 	},
 	{
 		.procname	= "seg6_flowlabel",

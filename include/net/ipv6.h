@@ -926,10 +926,18 @@ static inline int ip6_multipath_hash_policy(const struct net *net)
 {
 	return net->ipv6.sysctl.multipath_hash_policy;
 }
+static inline unsigned long *ip6_multipath_hash_fields(const struct net *net)
+{
+	return net->ipv6.sysctl.multipath_hash_fields;
+}
 #else
 static inline int ip6_multipath_hash_policy(const struct net *net)
 {
 	return 0;
+}
+static inline unsigned long *ip6_multipath_hash_fields(const struct net *net)
+{
+	return NULL;
 }
 #endif
 
