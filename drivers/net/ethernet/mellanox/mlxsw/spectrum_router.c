@@ -9631,12 +9631,53 @@ static void mlxsw_sp_mp_hash_inner_l3(struct mlxsw_sp_mp_hash_config *config)
 	MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV6_FLOW_LABEL);
 }
 
+static void
+mlxsw_sp_mp_hash_inner_custom(struct mlxsw_sp_mp_hash_config *config,
+			      const unsigned long *hash_fields)
+{
+	unsigned long *inner_headers = config->inner_headers;
+	unsigned long *inner_fields = config->inner_fields;
+
+	/* IPv4 Inner */
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, IPV4_EN_NOT_TCP_NOT_UDP);
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, IPV4_EN_TCP_UDP);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_SRC_IP, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_RANGE_SET(inner_fields, INNER_IPV4_SIP0, 4);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_DST_IP, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_RANGE_SET(inner_fields, INNER_IPV4_DIP0, 4);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_IP_PROTO, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV4_PROTOCOL);
+	/* IPv6 inner */
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, IPV6_EN_NOT_TCP_NOT_UDP);
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, IPV6_EN_TCP_UDP);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_SRC_IP, hash_fields)) {
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV6_SIP0_7);
+		MLXSW_SP_MP_HASH_FIELD_RANGE_SET(inner_fields, INNER_IPV6_SIP8, 8);
+	}
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_DST_IP, hash_fields)) {
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV6_DIP0_7);
+		MLXSW_SP_MP_HASH_FIELD_RANGE_SET(inner_fields, INNER_IPV6_DIP8, 8);
+	}
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_IP_PROTO, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV6_NEXT_HEADER);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_FLOWLABEL, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_IPV6_FLOW_LABEL);
+	/* L4 inner */
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, TCP_UDP_EN_IPV4);
+	MLXSW_SP_MP_HASH_HEADER_SET(inner_headers, TCP_UDP_EN_IPV6);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_SRC_PORT, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_TCP_UDP_SPORT);
+	if (FIB_MULTIPATH_HASH_TEST_FIELD(INNER_DST_PORT, hash_fields))
+		MLXSW_SP_MP_HASH_FIELD_SET(inner_fields, INNER_TCP_UDP_DPORT);
+}
+
 static void mlxsw_sp_mp4_hash_init(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_mp_hash_config *config)
 {
 	struct net *net = mlxsw_sp_net(mlxsw_sp);
 	unsigned long *headers = config->headers;
 	unsigned long *fields = config->fields;
+	unsigned long *hash_fields;
 
 	switch (net->ipv4.sysctl_fib_multipath_hash_policy) {
 	case 0:
@@ -9664,12 +9705,32 @@ static void mlxsw_sp_mp4_hash_init(struct mlxsw_sp *mlxsw_sp,
 		/* Inner */
 		mlxsw_sp_mp_hash_inner_l3(config);
 		break;
+	case 3:
+		hash_fields = net->ipv4.sysctl_fib_multipath_hash_fields;
+		/* Outer */
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, IPV4_EN_NOT_TCP_NOT_UDP);
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, IPV4_EN_TCP_UDP);
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, TCP_UDP_EN_IPV4);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(SRC_IP, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_RANGE_SET(fields, IPV4_SIP0, 4);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(DST_IP, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_RANGE_SET(fields, IPV4_DIP0, 4);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(IP_PROTO, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV4_PROTOCOL);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(SRC_PORT, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, TCP_UDP_SPORT);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(DST_PORT, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, TCP_UDP_DPORT);
+		/* Inner */
+		mlxsw_sp_mp_hash_inner_custom(config, hash_fields);
+		break;
 	}
 }
 
 static void mlxsw_sp_mp6_hash_init(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_mp_hash_config *config)
 {
+	unsigned long *hash_fields = ip6_multipath_hash_fields(mlxsw_sp_net(mlxsw_sp));
 	unsigned long *headers = config->headers;
 	unsigned long *fields = config->fields;
 
@@ -9708,6 +9769,30 @@ static void mlxsw_sp_mp6_hash_init(struct mlxsw_sp *mlxsw_sp,
 		MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV6_FLOW_LABEL);
 		/* Inner */
 		mlxsw_sp_mp_hash_inner_l3(config);
+		break;
+	case 3:
+		/* Outer */
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, IPV6_EN_NOT_TCP_NOT_UDP);
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, IPV6_EN_TCP_UDP);
+		MLXSW_SP_MP_HASH_HEADER_SET(headers, TCP_UDP_EN_IPV6);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(SRC_IP, hash_fields)) {
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV6_SIP0_7);
+			MLXSW_SP_MP_HASH_FIELD_RANGE_SET(fields, IPV6_SIP8, 8);
+		}
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(DST_IP, hash_fields)) {
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV6_DIP0_7);
+			MLXSW_SP_MP_HASH_FIELD_RANGE_SET(fields, IPV6_DIP8, 8);
+		}
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(IP_PROTO, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV6_NEXT_HEADER);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(FLOWLABEL, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, IPV6_FLOW_LABEL);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(SRC_PORT, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, TCP_UDP_SPORT);
+		if (FIB_MULTIPATH_HASH_TEST_FIELD(DST_PORT, hash_fields))
+			MLXSW_SP_MP_HASH_FIELD_SET(fields, TCP_UDP_DPORT);
+		/* Inner */
+		mlxsw_sp_mp_hash_inner_custom(config, hash_fields);
 		break;
 	}
 }
