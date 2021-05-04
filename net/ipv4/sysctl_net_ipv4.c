@@ -484,6 +484,8 @@ static int proc_fib_multipath_hash_fields(struct ctl_table *table, int write,
 	net->ipv4.fib_multipath_hash_fields_need_inner =
 		fib_multipath_hash_need_inner(hash_fields);
 
+	call_netevent_notifiers(NETEVENT_IPV4_MPATH_HASH_UPDATE, net);
+
 out:
 	return ret;
 }

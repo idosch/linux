@@ -62,6 +62,8 @@ proc_rt6_multipath_hash_fields(struct ctl_table *table, int write, void *buffer,
 	net->ipv6.sysctl.multipath_hash_fields_need_inner =
 		fib_multipath_hash_need_inner(hash_fields);
 
+	call_netevent_notifiers(NETEVENT_IPV6_MPATH_HASH_UPDATE, net);
+
 out:
 	return ret;
 }
