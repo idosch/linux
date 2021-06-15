@@ -958,6 +958,13 @@ static const struct genl_ops ethtool_genl_ops[] = {
 		.policy = ethnl_stats_get_policy,
 		.maxattr = ARRAY_SIZE(ethnl_stats_get_policy) - 1,
 	},
+	{
+		.cmd	= ETHTOOL_MSG_MODULE_EEPROM_SET,
+		.flags	= GENL_UNS_ADMIN_PERM,
+		.doit	= ethnl_set_module_eeprom,
+		.policy	= ethnl_module_eeprom_set_policy,
+		.maxattr = ARRAY_SIZE(ethnl_module_eeprom_set_policy) - 1,
+	},
 };
 
 static const struct genl_multicast_group ethtool_nl_mcgrps[] = {

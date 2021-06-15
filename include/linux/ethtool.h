@@ -388,17 +388,19 @@ struct ethtool_rmon_stats {
 #define ETH_MODULE_MAX_I2C_ADDRESS	0x7f
 
 /**
- * struct ethtool_module_eeprom - EEPROM dump from specified page
- * @offset: Offset within the specified EEPROM page to begin read, in bytes.
- * @length: Number of bytes to read.
- * @page: Page number to read from.
- * @bank: Page bank number to read from, if applicable by EEPROM spec.
+ * struct ethtool_module_eeprom - EEPROM read / write from / to specified page
+ * @offset: Offset within the specified EEPROM page to begin read / write,
+ *	in bytes.
+ * @length: Number of bytes to read / write.
+ * @page: Page number to read / write from / to.
+ * @bank: Page bank number to read / write from /to , if applicable by EEPROM
+ *	spec.
  * @i2c_address: I2C address of a page. Value less than 0x7f expected. Most
  *	EEPROMs use 0x50 or 0x51.
  * @data: Pointer to buffer with EEPROM data of @length size.
  *
- * This can be used to manage pages during EEPROM dump in ethtool and pass
- * required information to the driver.
+ * This can be used to manage pages during EEPROM read / write in ethtool and
+ * pass required information to the driver.
  */
 struct ethtool_module_eeprom {
 	u32	offset;
@@ -574,6 +576,8 @@ struct ethtool_module_eeprom {
  * @get_eth_ctrl_stats: Query some of the IEEE 802.3 MAC Ctrl statistics.
  * @get_rmon_stats: Query some of the RMON (RFC 2819) statistics.
  *	Set %ranges to a pointer to zero-terminated array of byte ranges.
+ * @set_module_eeprom_by_page: Write to a region of plug-in module EEPROM.
+ *	Returns a negative error code or zero.
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -693,6 +697,9 @@ struct ethtool_ops {
 	void	(*get_rmon_stats)(struct net_device *dev,
 				  struct ethtool_rmon_stats *rmon_stats,
 				  const struct ethtool_rmon_hist_range **ranges);
+	int	(*set_module_eeprom_by_page)(struct net_device *dev,
+					     const struct ethtool_module_eeprom *page,
+					     struct netlink_ext_ack *extack);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);

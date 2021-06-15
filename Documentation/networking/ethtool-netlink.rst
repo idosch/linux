@@ -212,6 +212,7 @@ Userspace to kernel:
   ``ETHTOOL_MSG_FEC_SET``               set FEC settings
   ``ETHTOOL_MSG_MODULE_EEPROM_GET``     read SFP module EEPROM
   ``ETHTOOL_MSG_STATS_GET``             get standard statistics
+  ``ETHTOOL_MSG_MODULE_EEPROM_SET``     write to SFP module EEPROM
   ===================================== ================================
 
 Kernel to userspace:
@@ -250,6 +251,7 @@ Kernel to userspace:
   ``ETHTOOL_MSG_FEC_NTF``                  FEC settings
   ``ETHTOOL_MSG_MODULE_EEPROM_GET_REPLY``  read SFP module EEPROM
   ``ETHTOOL_MSG_STATS_GET_REPLY``          standard statistics
+  ``ETHTOOL_MSG_MODULE_EEPROM_NTF``        SFP module EEPROM settings
   ======================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -1477,6 +1479,50 @@ Low and high bounds are inclusive, for example:
  etherStatsPkts512to1023Octets 512  1023
  ============================= ==== ====
 
+MODULE_EEPROM_SET
+=================
+
+Write to SFP module EEPROM.
+This interface is designed to allow writes of at most 1/2 page at once. This
+means only writes of 128 (or less) bytes are allowed, without crossing half
+page boundary located at offset 128. For pages other than 0 only high 128 bytes
+are accessible.
+
+Request contents:
+
+  =======================================  ======  ==========================
+  ``ETHTOOL_A_MODULE_EEPROM_HEADER``       nested  request header
+  ``ETHTOOL_A_MODULE_EEPROM_OFFSET``       u32     offset within a page
+  ``ETHTOOL_A_MODULE_EEPROM_LENGTH``       u32     amount of bytes to write
+  ``ETHTOOL_A_MODULE_EEPROM_PAGE``         u8      page number
+  ``ETHTOOL_A_MODULE_EEPROM_BANK``         u8      bank number
+  ``ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS``  u8      page I2C address
+  ``ETHTOOL_A_MODULE_EEPROM_DATA``         binary  array of bytes to write
+  =======================================  ======  ==========================
+
+The amount of bytes to write encoded in ``ETHTOOL_A_MODULE_EEPROM_LENGTH`` must
+match the length of the payload of ``ETHTOOL_A_MODULE_EEPROM_DATA``.
+
+If ``ETHTOOL_A_MODULE_EEPROM_BANK`` is not specified, bank 0 is assumed.
+
+Upon a successful write, a ``ETHTOOL_MSG_MODULE_EEPROM_NTF`` notification is
+sent to user space.
+
+Notification contents:
+
+  =======================================  ======  ==========================
+  ``ETHTOOL_A_MODULE_EEPROM_HEADER``       nested  reply header
+  ``ETHTOOL_A_MODULE_EEPROM_OFFSET``       u32     offset within a page
+  ``ETHTOOL_A_MODULE_EEPROM_LENGTH``       u32     amount of bytes written
+  ``ETHTOOL_A_MODULE_EEPROM_PAGE``         u8      page number
+  ``ETHTOOL_A_MODULE_EEPROM_BANK``         u8      bank number
+  ``ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS``  u8      page I2C address
+  =======================================  ======  ==========================
+
+The notification does not include the ``ETHTOOL_A_MODULE_EEPROM_DATA``
+attribute in order to prevent exposing module EEPROM contents to users without
+admin privileges.
+
 Request translation
 ===================
 
@@ -1575,4 +1621,5 @@ are netlink only.
   n/a                                 ``ETHTOOL_MSG_CABLE_TEST_ACT``
   n/a                                 ``ETHTOOL_MSG_CABLE_TEST_TDR_ACT``
   n/a                                 ``ETHTOOL_MSG_TUNNEL_INFO_GET``
+  n/a                                 ``ETHTOOL_MSG_MODULE_EEPROM_SET``
   =================================== =====================================

@@ -250,3 +250,136 @@ const struct nla_policy ethnl_module_eeprom_get_policy[] = {
 		NLA_POLICY_RANGE(NLA_U8, 0, ETH_MODULE_MAX_I2C_ADDRESS),
 };
 
+const struct nla_policy ethnl_module_eeprom_set_policy[] = {
+	[ETHTOOL_A_MODULE_EEPROM_HEADER]	= NLA_POLICY_NESTED(ethnl_header_policy),
+	[ETHTOOL_A_MODULE_EEPROM_OFFSET]	=
+		NLA_POLICY_MAX(NLA_U32, ETH_MODULE_EEPROM_PAGE_LEN * 2 - 1),
+	[ETHTOOL_A_MODULE_EEPROM_LENGTH]	=
+		NLA_POLICY_RANGE(NLA_U32, 1, ETH_MODULE_EEPROM_PAGE_LEN),
+	[ETHTOOL_A_MODULE_EEPROM_PAGE]		= { .type = NLA_U8 },
+	[ETHTOOL_A_MODULE_EEPROM_BANK]		= { .type = NLA_U8 },
+	[ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS]	=
+		NLA_POLICY_RANGE(NLA_U8, 0, ETH_MODULE_MAX_I2C_ADDRESS),
+	[ETHTOOL_A_MODULE_EEPROM_DATA]		=
+		NLA_POLICY_RANGE(NLA_BINARY, 1, ETH_MODULE_EEPROM_PAGE_LEN),
+};
+
+static int ethnl_module_eeprom_ntf(struct net_device *dev,
+				   const struct ethtool_module_eeprom *page)
+{
+	struct sk_buff *skb;
+	void *ehdr;
+	int err;
+
+	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!skb) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	ehdr = ethnl_bcastmsg_put(skb, ETHTOOL_MSG_MODULE_EEPROM_NTF);
+	if (!ehdr) {
+		err = -EMSGSIZE;
+		goto out;
+	}
+
+	err = ethnl_fill_reply_header(skb, dev, ETHTOOL_A_MODULE_EEPROM_HEADER);
+	if (err)
+		goto out;
+
+	err = nla_put_u32(skb, ETHTOOL_A_MODULE_EEPROM_OFFSET, page->offset);
+	if (err)
+		goto out;
+
+	err = nla_put_u32(skb, ETHTOOL_A_MODULE_EEPROM_LENGTH, page->length);
+	if (err)
+		goto out;
+
+	err = nla_put_u8(skb, ETHTOOL_A_MODULE_EEPROM_PAGE, page->page);
+	if (err)
+		goto out;
+
+	err = nla_put_u8(skb, ETHTOOL_A_MODULE_EEPROM_BANK, page->bank);
+	if (err)
+		goto out;
+
+	err = nla_put_u8(skb, ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS,
+			 page->i2c_address);
+	if (err)
+		goto out;
+
+	genlmsg_end(skb, ehdr);
+
+	return ethnl_multicast(skb, dev);
+
+out:
+	nlmsg_free(skb);
+	return err;
+}
+
+int ethnl_set_module_eeprom(struct sk_buff *skb, struct genl_info *info)
+{
+	struct ethtool_module_eeprom page = {};
+	struct ethnl_req_info req_info = {};
+	struct nlattr **tb = info->attrs;
+	const struct ethtool_ops *ops;
+	struct net_device *dev;
+	int ret;
+
+	if (!tb[ETHTOOL_A_MODULE_EEPROM_OFFSET] ||
+	    !tb[ETHTOOL_A_MODULE_EEPROM_LENGTH] ||
+	    !tb[ETHTOOL_A_MODULE_EEPROM_PAGE] ||
+	    !tb[ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS] ||
+	    !tb[ETHTOOL_A_MODULE_EEPROM_DATA])
+		return -EINVAL;
+
+	if (nla_get_u32(tb[ETHTOOL_A_MODULE_EEPROM_LENGTH]) !=
+	    nla_len(tb[ETHTOOL_A_MODULE_EEPROM_DATA]))
+		NL_SET_ERR_MSG_ATTR(info->extack,
+				    tb[ETHTOOL_A_MODULE_EEPROM_LENGTH],
+				    "data length does not match specified length");
+
+	ret = eeprom_validate(tb, info->extack);
+	if (ret < 0)
+		return ret;
+
+	ret = ethnl_parse_header_dev_get(&req_info,
+					 tb[ETHTOOL_A_MODULE_EEPROM_HEADER],
+					 genl_info_net(info), info->extack,
+					 true);
+	if (ret < 0)
+		return ret;
+	dev = req_info.dev;
+	ops = dev->ethtool_ops;
+	ret = -EOPNOTSUPP;
+	if (!ops->set_module_eeprom_by_page)
+		goto out_dev;
+
+	page.offset = nla_get_u32(tb[ETHTOOL_A_MODULE_EEPROM_OFFSET]);
+	page.length = nla_get_u32(tb[ETHTOOL_A_MODULE_EEPROM_LENGTH]);
+	page.page = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_PAGE]);
+	page.i2c_address = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS]);
+	page.data = nla_data(tb[ETHTOOL_A_MODULE_EEPROM_DATA]);
+	if (tb[ETHTOOL_A_MODULE_EEPROM_BANK])
+		page.bank = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_BANK]);
+
+	rtnl_lock();
+	ret = ethnl_ops_begin(dev);
+	if (ret < 0)
+		goto out_rtnl;
+
+	ret = dev->ethtool_ops->set_module_eeprom_by_page(dev, &page,
+							  info->extack);
+	if (ret < 0)
+		goto out_ops;
+
+	ethnl_module_eeprom_ntf(dev, &page);
+
+out_ops:
+	ethnl_ops_complete(dev);
+out_rtnl:
+	rtnl_unlock();
+out_dev:
+	dev_put(dev);
+	return ret;
+}
