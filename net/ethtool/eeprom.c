@@ -158,6 +158,9 @@ static int eeprom_parse_request(struct ethnl_req_info *req_info, struct nlattr *
 	request->i2c_address = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_I2C_ADDRESS]);
 	request->offset = nla_get_u32(tb[ETHTOOL_A_MODULE_EEPROM_OFFSET]);
 	request->length = nla_get_u32(tb[ETHTOOL_A_MODULE_EEPROM_LENGTH]);
+	request->page = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_PAGE]);
+	if (tb[ETHTOOL_A_MODULE_EEPROM_BANK])
+		request->bank = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_BANK]);
 
 	/* The following set of conditions limit the API to only dump 1/2
 	 * EEPROM page without crossing low page boundary located at offset 128.
@@ -165,7 +168,6 @@ static int eeprom_parse_request(struct ethnl_req_info *req_info, struct nlattr *
 	 * either low 128 bytes or high 128 bytes.
 	 * For pages higher than 0 only high 128 bytes are accessible.
 	 */
-	request->page = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_PAGE]);
 	if (request->page && request->offset < ETH_MODULE_EEPROM_PAGE_LEN) {
 		NL_SET_ERR_MSG_ATTR(extack, tb[ETHTOOL_A_MODULE_EEPROM_PAGE],
 				    "reading from lower half page is allowed for page 0 only");
@@ -182,9 +184,6 @@ static int eeprom_parse_request(struct ethnl_req_info *req_info, struct nlattr *
 				    "reading cross page boundary is illegal");
 		return -EINVAL;
 	}
-
-	if (tb[ETHTOOL_A_MODULE_EEPROM_BANK])
-		request->bank = nla_get_u8(tb[ETHTOOL_A_MODULE_EEPROM_BANK]);
 
 	return 0;
 }
