@@ -389,6 +389,50 @@ mlxsw_env_get_module_eeprom_by_page(struct mlxsw_core *mlxsw_core, u8 module,
 }
 EXPORT_SYMBOL(mlxsw_env_get_module_eeprom_by_page);
 
+int
+mlxsw_env_set_module_eeprom_by_page(struct mlxsw_core *mlxsw_core, u8 module,
+				    const struct ethtool_module_eeprom *page,
+				    struct netlink_ext_ack *extack)
+{
+	u32 bytes_written = 0;
+	u16 device_addr;
+
+	/* Offset cannot be larger than 2 * ETH_MODULE_EEPROM_PAGE_LEN */
+	device_addr = page->offset;
+
+	while (bytes_written < page->length) {
+		char eeprom_tmp[MLXSW_REG_MCIA_EEPROM_SIZE] = {};
+		char mcia_pl[MLXSW_REG_MCIA_LEN];
+		u8 size;
+		int err;
+
+		size = min_t(u8, page->length - bytes_written,
+			     MLXSW_REG_MCIA_EEPROM_SIZE);
+
+		mlxsw_reg_mcia_pack(mcia_pl, module, 0, page->page,
+				    device_addr + bytes_written, size,
+				    page->i2c_address);
+		mlxsw_reg_mcia_bank_number_set(mcia_pl, page->bank);
+		memcpy(eeprom_tmp, page->data + bytes_written, size);
+		mlxsw_reg_mcia_eeprom_memcpy_to(mcia_pl, eeprom_tmp);
+
+		err = mlxsw_reg_write(mlxsw_core, MLXSW_REG(mcia), mcia_pl);
+		if (err) {
+			NL_SET_ERR_MSG_MOD(extack, "Failed to access module's EEPROM");
+			return err;
+		}
+
+		err = mlxsw_env_mcia_status_process(mcia_pl, extack);
+		if (err)
+			return err;
+
+		bytes_written += size;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(mlxsw_env_set_module_eeprom_by_page);
+
 static int mlxsw_env_module_has_temp_sensor(struct mlxsw_core *mlxsw_core,
 					    u8 module,
 					    bool *p_has_temp_sensor)
