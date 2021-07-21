@@ -705,6 +705,31 @@ enum ethtool_stringset {
 };
 
 /**
+ * enum ethtool_module_power_mode_policy - plug-in module power mode policy
+ * @ETHTOOL_MODULE_POWER_MODE_POLICY_LOW: Module is always in low power mode.
+ * @ETHTOOL_MODULE_POWER_MODE_POLICY_HIGH: Module is always in high power mode.
+ * @ETHTOOL_MODULE_POWER_MODE_POLICY_HIGH_ON_UP: Module is transitioned by the
+ *	host to high power mode when the first port using it is put
+ *	administratively up and to low power mode when the last port using it
+ *	is put administratively down.
+ */
+enum ethtool_module_power_mode_policy {
+	ETHTOOL_MODULE_POWER_MODE_POLICY_LOW,
+	ETHTOOL_MODULE_POWER_MODE_POLICY_HIGH,
+	ETHTOOL_MODULE_POWER_MODE_POLICY_HIGH_ON_UP,
+};
+
+/**
+ * enum ethtool_module_power_mode - plug-in module power mode
+ * @ETHTOOL_MODULE_POWER_MODE_LOW: Module is in low power mode.
+ * @ETHTOOL_MODULE_POWER_MODE_HIGH: Module is in high power mode.
+ */
+enum ethtool_module_power_mode {
+	ETHTOOL_MODULE_POWER_MODE_LOW,
+	ETHTOOL_MODULE_POWER_MODE_HIGH,
+};
+
+/**
  * struct ethtool_gstrings - string set for data tagging
  * @cmd: Command number = %ETHTOOL_GSTRINGS
  * @string_set: String set ID; one of &enum ethtool_stringset
