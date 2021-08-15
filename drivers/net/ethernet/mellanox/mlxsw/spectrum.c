@@ -538,7 +538,9 @@ static int mlxsw_sp_port_module_map(struct mlxsw_sp_port *mlxsw_sp_port)
 	struct mlxsw_sp_port_mapping *port_mapping = &mlxsw_sp_port->mapping;
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	char pmlp_pl[MLXSW_REG_PMLP_LEN];
-	int i;
+	int i, err;
+
+	mlxsw_env_module_port_map(mlxsw_sp->core, port_mapping->module);
 
 	mlxsw_reg_pmlp_pack(pmlp_pl, mlxsw_sp_port->local_port);
 	mlxsw_reg_pmlp_width_set(pmlp_pl, port_mapping->width);
@@ -547,37 +549,59 @@ static int mlxsw_sp_port_module_map(struct mlxsw_sp_port *mlxsw_sp_port)
 		mlxsw_reg_pmlp_tx_lane_set(pmlp_pl, i, port_mapping->lane + i); /* Rx & Tx */
 	}
 
-	return mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(pmlp), pmlp_pl);
+	err = mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(pmlp), pmlp_pl);
+	if (err)
+		goto err_pmlp_write;
+	return 0;
+
+err_pmlp_write:
+	mlxsw_env_module_port_unmap(mlxsw_sp->core, port_mapping->module);
+	return err;
 }
 
 static void mlxsw_sp_port_module_unmap(struct mlxsw_sp_port *mlxsw_sp_port)
 {
+	struct mlxsw_sp_port_mapping *port_mapping = &mlxsw_sp_port->mapping;
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	char pmlp_pl[MLXSW_REG_PMLP_LEN];
 
 	mlxsw_reg_pmlp_pack(pmlp_pl, mlxsw_sp_port->local_port);
 	mlxsw_reg_pmlp_width_set(pmlp_pl, 0);
 	mlxsw_reg_write(mlxsw_sp->core, MLXSW_REG(pmlp), pmlp_pl);
+	mlxsw_env_module_port_unmap(mlxsw_sp->core, port_mapping->module);
 }
 
 static int mlxsw_sp_port_open(struct net_device *dev)
 {
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	int err;
 
-	err = mlxsw_sp_port_admin_status_set(mlxsw_sp_port, true);
+	err = mlxsw_env_module_port_up(mlxsw_sp->core,
+				       mlxsw_sp_port->mapping.module);
 	if (err)
 		return err;
+	err = mlxsw_sp_port_admin_status_set(mlxsw_sp_port, true);
+	if (err)
+		goto err_port_admin_status_set;
 	netif_start_queue(dev);
 	return 0;
+
+err_port_admin_status_set:
+	mlxsw_env_module_port_down(mlxsw_sp->core,
+				   mlxsw_sp_port->mapping.module);
+	return err;
 }
 
 static int mlxsw_sp_port_stop(struct net_device *dev)
 {
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 
 	netif_stop_queue(dev);
 	mlxsw_sp_port_admin_status_set(mlxsw_sp_port, false);
+	mlxsw_env_module_port_down(mlxsw_sp->core,
+				   mlxsw_sp_port->mapping.module);
 	return 0;
 }
 
