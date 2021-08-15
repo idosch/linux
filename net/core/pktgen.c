@@ -2662,33 +2662,6 @@ static void free_SAs(struct pktgen_dev *pkt_dev)
 	}
 }
 
-static void fill_imix_distribution(struct pktgen_dev *pkt_dev)
-{
-	int cumulative_probabilites[MAX_IMIX_ENTRIES];
-	int j = 0;
-	__u64 cumulative_prob = 0;
-	__u64 total_weight = 0;
-	int i = 0;
-
-	for (i = 0; i < pkt_dev->n_imix_entries; i++)
-		total_weight += pkt_dev->imix_entries[i].weight;
-
-	/* Fill cumulative_probabilites with sum of normalized probabilities */
-	for (i = 0; i < pkt_dev->n_imix_entries - 1; i++) {
-		cumulative_prob += div64_u64(pkt_dev->imix_entries[i].weight *
-						     IMIX_PRECISION,
-					     total_weight);
-		cumulative_probabilites[i] = cumulative_prob;
-	}
-	cumulative_probabilites[pkt_dev->n_imix_entries - 1] = 100;
-
-	for (i = 0; i < IMIX_PRECISION; i++) {
-		if (i == cumulative_probabilites[j])
-			j++;
-		pkt_dev->imix_distribution[i] = j;
-	}
-}
-
 static int process_ipsec(struct pktgen_dev *pkt_dev,
 			      struct sk_buff *skb, __be16 protocol)
 {
@@ -3131,6 +3104,33 @@ static void pktgen_clear_counters(struct pktgen_dev *pkt_dev)
 	pkt_dev->sofar = 0;
 	pkt_dev->tx_bytes = 0;
 	pkt_dev->errors = 0;
+}
+
+static void fill_imix_distribution(struct pktgen_dev *pkt_dev)
+{
+	int cumulative_probabilites[MAX_IMIX_ENTRIES];
+	int j = 0;
+	__u64 cumulative_prob = 0;
+	__u64 total_weight = 0;
+	int i = 0;
+
+	for (i = 0; i < pkt_dev->n_imix_entries; i++)
+		total_weight += pkt_dev->imix_entries[i].weight;
+
+	/* Fill cumulative_probabilites with sum of normalized probabilities */
+	for (i = 0; i < pkt_dev->n_imix_entries - 1; i++) {
+		cumulative_prob += div64_u64(pkt_dev->imix_entries[i].weight *
+						     IMIX_PRECISION,
+					     total_weight);
+		cumulative_probabilites[i] = cumulative_prob;
+	}
+	cumulative_probabilites[pkt_dev->n_imix_entries - 1] = 100;
+
+	for (i = 0; i < IMIX_PRECISION; i++) {
+		if (i == cumulative_probabilites[j])
+			j++;
+		pkt_dev->imix_distribution[i] = j;
+	}
 }
 
 /* Set up structure for sending pkts, clear counters */
