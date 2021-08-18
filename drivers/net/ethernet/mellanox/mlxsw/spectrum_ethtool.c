@@ -96,6 +96,11 @@ mlxsw_sp_link_ext_state_opcode_map[] = {
 	{1032, ETHTOOL_LINK_EXT_STATE_POWER_BUDGET_EXCEEDED, 0},
 
 	{1030, ETHTOOL_LINK_EXT_STATE_OVERHEAT, 0},
+
+	{1042, ETHTOOL_LINK_EXT_STATE_MODULE,
+	 ETHTOOL_LINK_EXT_SUBSTATE_MODULE_CMIS_NOT_READY},
+	{2048, ETHTOOL_LINK_EXT_STATE_MODULE,
+	 ETHTOOL_LINK_EXT_SUBSTATE_MODULE_LOW_POWER_MODE},
 };
 
 static void
@@ -124,6 +129,10 @@ mlxsw_sp_port_set_link_ext_state(struct mlxsw_sp_ethtool_link_ext_state_opcode_m
 		link_ext_state_info->cable_issue =
 			link_ext_state_mapping.link_ext_substate;
 		break;
+	case ETHTOOL_LINK_EXT_STATE_MODULE:
+		link_ext_state_info->module =
+			link_ext_state_mapping.link_ext_substate;
+		break;
 	default:
 		break;
 	}
@@ -132,17 +141,44 @@ mlxsw_sp_port_set_link_ext_state(struct mlxsw_sp_ethtool_link_ext_state_opcode_m
 }
 
 static int
+mlxsw_sp_port_status_opcode_drv_get(struct mlxsw_sp_port *mlxsw_sp_port,
+				    u32 *p_status_opcode)
+{
+	struct ethtool_module_power_mode_params params = {};
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+	u8 module = mlxsw_sp_port->mapping.module;
+	int err;
+
+	*p_status_opcode = 0;
+
+	err = mlxsw_env_get_module_power_mode(mlxsw_sp->core, module, &params,
+					      NULL);
+	if (err)
+		return err;
+	if (params.mode == ETHTOOL_MODULE_POWER_MODE_LOW)
+		*p_status_opcode = 2048;
+
+	return 0;
+}
+
+static int
 mlxsw_sp_port_get_link_ext_state(struct net_device *dev,
 				 struct ethtool_link_ext_state_info *link_ext_state_info)
 {
 	struct mlxsw_sp_ethtool_link_ext_state_opcode_mapping link_ext_state_mapping;
 	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
+	u32 status_opcode, status_opcode_drv;
 	char pddr_pl[MLXSW_REG_PDDR_LEN];
 	int opcode, err, i;
-	u32 status_opcode;
 
 	if (netif_carrier_ok(dev))
 		return -ENODATA;
+
+	/* Opcodes 2048-3072 are reserved for driver use. */
+	err = mlxsw_sp_port_status_opcode_drv_get(mlxsw_sp_port,
+						  &status_opcode_drv);
+	if (err)
+		return err;
 
 	mlxsw_reg_pddr_pack(pddr_pl, mlxsw_sp_port->local_port,
 			    MLXSW_REG_PDDR_PAGE_SELECT_TROUBLESHOOTING_INFO);
@@ -156,8 +192,13 @@ mlxsw_sp_port_get_link_ext_state(struct net_device *dev,
 		return err;
 
 	status_opcode = mlxsw_reg_pddr_trblsh_status_opcode_get(pddr_pl);
-	if (!status_opcode)
+	if (!status_opcode && !status_opcode_drv)
 		return -ENODATA;
+
+	/* Allow driver-detected issues to take precedence, as it is likely
+	 * that they are more meaningful to user space.
+	 */
+	status_opcode = status_opcode_drv ? status_opcode_drv : status_opcode;
 
 	for (i = 0; i < ARRAY_SIZE(mlxsw_sp_link_ext_state_opcode_map); i++) {
 		link_ext_state_mapping = mlxsw_sp_link_ext_state_opcode_map[i];
