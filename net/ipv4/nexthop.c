@@ -473,6 +473,7 @@ static void nexthop_free_group(struct nexthop *nh)
 		struct nh_grp_entry *nhge = &nhg->nh_entries[i];
 
 		WARN_ON(!list_empty(&nhge->nh_list));
+		free_percpu(nhge->stats);
 		nexthop_put(nhge->nh);
 	}
 
@@ -537,6 +538,7 @@ static struct nh_group *nexthop_grp_alloc(u16 num_nh)
 		nhg->num_nh = num_nh;
 
 	return nhg;
+
 }
 
 static void nh_res_table_upkeep_dw(struct work_struct *work);
@@ -1151,6 +1153,17 @@ static bool ipv4_good_nh(const struct fib_nh *nh)
 	return !!(state & NUD_VALID);
 }
 
+static void nh_grp_entry_stats_update(struct nh_grp_entry *nhge)
+{
+	struct nh_grp_entry_stats *stats;
+
+	stats = get_cpu_ptr(nhge->stats);
+	u64_stats_update_begin(&stats->syncp);
+	stats->packets++;
+	u64_stats_update_end(&stats->syncp);
+	put_cpu_ptr(stats);
+}
+
 static struct nexthop *nexthop_select_path_hthr(struct nh_group *nhg, int hash)
 {
 	struct nexthop *rc = NULL;
@@ -1164,20 +1177,26 @@ static struct nexthop *nexthop_select_path_hthr(struct nh_group *nhg, int hash)
 			continue;
 
 		nhi = rcu_dereference(nhge->nh->nh_info);
-		if (nhi->fdb_nh)
+		if (nhi->fdb_nh) {
+			nh_grp_entry_stats_update(nhge);
 			return nhge->nh;
+		}
 
 		/* nexthops always check if it is good and does
 		 * not rely on a sysctl for this behavior
 		 */
 		switch (nhi->family) {
 		case AF_INET:
-			if (ipv4_good_nh(&nhi->fib_nh))
+			if (ipv4_good_nh(&nhi->fib_nh)) {
+				nh_grp_entry_stats_update(nhge);
 				return nhge->nh;
+			}
 			break;
 		case AF_INET6:
-			if (ipv6_good_nh(&nhi->fib6_nh))
+			if (ipv6_good_nh(&nhi->fib6_nh)) {
+				nh_grp_entry_stats_update(nhge);
 				return nhge->nh;
+			}
 			break;
 		}
 
@@ -1201,6 +1220,7 @@ static struct nexthop *nexthop_select_path_res(struct nh_group *nhg, int hash)
 	bucket = &res_table->nh_buckets[bucket_index];
 	nh_res_bucket_set_busy(bucket);
 	nhge = rcu_dereference(bucket->nh_entry);
+	nh_grp_entry_stats_update(nhge);
 	return nhge->nh;
 }
 
@@ -1774,6 +1794,7 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 			newg->has_v4 = true;
 
 		list_del(&nhges[i].nh_list);
+		new_nhges[j].stats = nhges[i].stats;
 		new_nhges[j].nh_parent = nhges[i].nh_parent;
 		new_nhges[j].nh = nhges[i].nh;
 		new_nhges[j].weight = nhges[i].weight;
@@ -1789,6 +1810,7 @@ static void remove_nh_grp_entry(struct net *net, struct nh_grp_entry *nhge,
 	rcu_assign_pointer(nhp->nh_grp, newg);
 
 	list_del(&nhge->nh_list);
+	free_percpu(nhge->stats);
 	nexthop_put(nhge->nh);
 
 	/* Removal of a NH from a resilient group is notified through
@@ -2433,6 +2455,12 @@ static struct nexthop *nexthop_create_group(struct net *net,
 		if (nhi->family == AF_INET)
 			nhg->has_v4 = true;
 
+		nhg->nh_entries[i].stats =
+			netdev_alloc_pcpu_stats(struct nh_grp_entry_stats);
+		if (!nhg->nh_entries[i].stats) {
+			nexthop_put(nhe);
+			goto out_no_nh;
+		}
 		nhg->nh_entries[i].nh = nhe;
 		nhg->nh_entries[i].weight = entry[i].weight + 1;
 		list_add(&nhg->nh_entries[i].nh_list, &nhe->grp_list);
@@ -2472,6 +2500,7 @@ static struct nexthop *nexthop_create_group(struct net *net,
 out_no_nh:
 	for (i--; i >= 0; --i) {
 		list_del(&nhg->nh_entries[i].nh_list);
+		free_percpu(nhg->nh_entries[i].stats);
 		nexthop_put(nhg->nh_entries[i].nh);
 	}
 
