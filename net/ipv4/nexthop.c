@@ -655,6 +655,74 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+static void nh_grp_entry_stats_read(const struct nh_grp_entry *nhge,
+				    struct nh_grp_entry_stats *stats)
+{
+	int i;
+
+	memset(stats, 0, sizeof(*stats));
+	for_each_possible_cpu(i) {
+		struct nh_grp_entry_stats *cpu_stats;
+		unsigned int start;
+		u64 packets;
+
+		cpu_stats = per_cpu_ptr(nhge->stats, i);
+		do {
+			start = u64_stats_fetch_begin_irq(&cpu_stats->syncp);
+			packets = cpu_stats->packets;
+		} while (u64_stats_fetch_retry_irq(&cpu_stats->syncp, start));
+
+		stats->packets += packets;
+	}
+}
+
+static int nla_put_nh_group_stats_entry(struct sk_buff *skb,
+					const struct nh_grp_entry *nhge)
+{
+	struct nh_grp_entry_stats stats;
+	struct nlattr *nest;
+
+	nh_grp_entry_stats_read(nhge, &stats);
+
+	nest = nla_nest_start(skb, NHA_GROUP_STATS_ENTRY);
+	if (!nest)
+		return -EMSGSIZE;
+
+	if (nla_put_u32(skb, NHA_GROUP_STATS_ENTRY_ID, nhge->nh->id) ||
+	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS, stats.packets,
+			      NHA_GROUP_STATS_ENTRY_PAD))
+		goto nla_put_failure;
+
+	nla_nest_end(skb, nest);
+	return 0;
+
+nla_put_failure:
+	nla_nest_cancel(skb, nest);
+	return -EMSGSIZE;
+}
+
+static int nla_put_nh_group_stats(struct sk_buff *skb,
+				  const struct nh_group *nhg)
+{
+	struct nlattr *nest;
+	int i;
+
+	nest = nla_nest_start(skb, NHA_GROUP_STATS);
+	if (!nest)
+		return -EMSGSIZE;
+
+	for (i = 0; i < nhg->num_nh; i++)
+		if (nla_put_nh_group_stats_entry(skb, &nhg->nh_entries[i]))
+			goto nla_put_failure;
+
+	nla_nest_end(skb, nest);
+	return 0;
+
+nla_put_failure:
+	nla_nest_cancel(skb, nest);
+	return -EMSGSIZE;
+}
+
 static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
 {
 	struct nexthop_grp *p;
@@ -683,6 +751,9 @@ static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
 	}
 
 	if (nhg->resilient && nla_put_nh_group_res(skb, nhg))
+		goto nla_put_failure;
+
+	if (nhg->num_nh > 1 && nla_put_nh_group_stats(skb, nhg))
 		goto nla_put_failure;
 
 	return 0;
@@ -781,6 +852,13 @@ static size_t nh_nlmsg_size_grp_res(struct nh_group *nhg)
 		nla_total_size_64bit(8);/* NHA_RES_GROUP_UNBALANCED_TIME */
 }
 
+static size_t nh_nlmsg_size_grp_stats_entry(void)
+{
+	return nla_total_size(0) +			/* NHA_GROUP_STATS_ENTRY */
+		nla_total_size(sizeof(u32)) +		/* NHA_GROUP_STATS_ENTRY_ID */
+		nla_total_size_64bit(sizeof(u64));	/* NHA_GROUP_STATS_ENTRY_PACKETS */
+}
+
 static size_t nh_nlmsg_size_grp(struct nexthop *nh)
 {
 	struct nh_group *nhg = rtnl_dereference(nh->nh_grp);
@@ -790,6 +868,11 @@ static size_t nh_nlmsg_size_grp(struct nexthop *nh)
 
 	if (nhg->resilient)
 		tot += nh_nlmsg_size_grp_res(nhg);
+
+	if (nhg->num_nh > 1) {
+		tot += nla_total_size(0);	/* NHA_GROUP_STATS */
+		tot += nhg->num_nh * nh_nlmsg_size_grp_stats_entry();
+	}
 
 	return tot;
 }
