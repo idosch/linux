@@ -184,7 +184,7 @@ according to message purpose:
 
 Userspace to kernel:
 
-  ===================================== =================================
+  ===================================== ====================================
   ``ETHTOOL_MSG_STRSET_GET``            get string set
   ``ETHTOOL_MSG_LINKINFO_GET``          get link settings
   ``ETHTOOL_MSG_LINKINFO_SET``          set link settings
@@ -220,7 +220,8 @@ Userspace to kernel:
   ``ETHTOOL_MSG_PHC_VCLOCKS_GET``       get PHC virtual clocks info
   ``ETHTOOL_MSG_MODULE_SET``            set transceiver module parameters
   ``ETHTOOL_MSG_MODULE_GET``            get transceiver module parameters
-  ===================================== =================================
+  ``ETHTOOL_MSG_MODULE_FW_INFO_GET``    get transceiver module firmware info
+  ===================================== ====================================
 
 Kernel to userspace:
 
@@ -260,6 +261,7 @@ Kernel to userspace:
   ``ETHTOOL_MSG_STATS_GET_REPLY``          standard statistics
   ``ETHTOOL_MSG_PHC_VCLOCKS_GET_REPLY``    PHC virtual clocks info
   ``ETHTOOL_MSG_MODULE_GET_REPLY``         transceiver module parameters
+  ``ETHTOOL_MSG_MODULE_FW_INFO_GET_REPLY`` transceiver module firmware info
   ======================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -1598,6 +1600,67 @@ For SFF-8636 modules, low power mode is forced by the host according to table
 For CMIS modules, low power mode is forced by the host according to table 6-12
 in revision 5.0 of the specification.
 
+MODULE_FW_INFO_GET
+==================
+
+Gets transceiver module firmware information.
+
+Request contents:
+
+  ======================================  ======  ==========================
+  ``ETHTOOL_A_MODULE_FW_INFO_HEADER``     nested  request header
+  ======================================  ======  ==========================
+
+Kernel response contents:
+
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_INFO_HEADER``               | nested | reply header   |
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE``                | nested | firmware image |
+ +-+-------------------------------------------------+--------+----------------+
+ | | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_NAME``         | string | image name     |
+ +-+-------------------------------------------------+--------+----------------+
+ | | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_RUNNING``      | bool   | running        |
+ +-+-------------------------------------------------+--------+----------------+
+ | | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_COMMITTED``    | bool   | committed      |
+ +-+-------------------------------------------------+--------+----------------+
+ | | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_VALID``        | bool   | valid          |
+ +-+-------------------------------------------------+--------+----------------+
+ | | ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_VERSION``      | string | image version  |
+ +-+-------------------------------------------------+--------+----------------+
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE`` nested attribute may appear multiple
+times in the response, according to the number of firmware images stored in the
+transceiver module. CMIS modules, for example, may have up to three images: Two
+host updateable images stored in up to two storage banks (A and B) and an
+internal factory image. The following paragraphs describe various image
+attributes.
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_NAME`` attribute encodes the image's name.
+The name is significant as a vendor may provide two firmware images, each one
+intended for a different bank.
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_RUNNING`` attribute indicates if the image
+is currently running or not.
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_COMMITTED`` attribute indicates if the
+image is to be run upon reset or not.
+
+The last two attributes can be used by user space to determine which firmware
+image should be used for the firmware update. In CMIS modules, for example, if
+image A is running and committed, image B should be used.
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_VALID`` attribute encodes the validity of
+the image. A valid image is runnable and persistently stored completely
+undamaged.
+
+The ``ETHTOOL_A_MODULE_FW_INFO_IMAGE_VERSION`` attribute encodes the version of
+the image.
+
+For CMIS modules, the above mentioned information can be queried from the
+module using CDB CMD 0100h (Get Firmware Info). See section 9.7.1 in revision
+5.0 of the specification.
+
 Request translation
 ===================
 
@@ -1699,4 +1762,5 @@ are netlink only.
   n/a                                 ``ETHTOOL_MSG_PHC_VCLOCKS_GET``
   n/a                                 ``ETHTOOL_MSG_MODULE_GET``
   n/a                                 ``ETHTOOL_MSG_MODULE_SET``
+  n/a                                 ``ETHTOOL_MSG_MODULE_FW_INFO_GET``
   =================================== =====================================

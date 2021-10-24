@@ -443,6 +443,71 @@ struct ethtool_module_power_mode_params {
 	enum ethtool_module_power_mode mode;
 };
 
+#define ETH_MODULE_FW_VER_LEN 48
+
+/**
+ * struct ethtool_module_fw_info_image - Module firmware image information
+ * @running: Whether the image is currently running or not.
+ * @committed: Whether the image is run upon resets.
+ * @valid: Whether the image is runnable and persistently stored completely
+ *	undamaged.
+ * @ver_major: Firmware image major revision.
+ * @ver_minor: Firmware image minor revision.
+ * @ver_build: Firmware image build number.
+ * @ver_extra_str: Firmware image additional information.
+ */
+struct ethtool_module_fw_info_image {
+	u8 running:1,
+	   committed:1,
+	   valid:1;
+	u8 ver_major;
+	u8 ver_minor;
+	u8 ver_build;
+	char ver_extra_str[ETH_MODULE_FW_VER_LEN];
+};
+
+/**
+ * struct ethtool_module_fw_info_cmis - CMIS module firmware information
+ * @a_present: Whether image A is present or not.
+ * @b_present: Whether image B is present or not.
+ * @factory_present: Whether factory image is present or not.
+ * @a: Image A firmware information.
+ * @b: Image B firmware information.
+ * @factory: Factory image firmware information.
+ *
+ * CMIS modules can have up to two host updateable images stored in up to two
+ * firmware banks, called A and B. In addition, the module may also have an
+ * internal factory image.
+ */
+struct ethtool_module_fw_info_cmis {
+	u8 a_present:1,
+	   b_present:1,
+	   factory_present:1;
+	struct ethtool_module_fw_info_image a;
+	struct ethtool_module_fw_info_image b;
+	struct ethtool_module_fw_info_image factory;
+};
+
+/**
+ * enum ethtool_module_fw_info_type - Module firmware information type
+ * @ETHTOOL_MODULE_FW_INFO_TYPE_CMIS: CMIS module firmware information type.
+ */
+enum ethtool_module_fw_info_type {
+	ETHTOOL_MODULE_FW_INFO_TYPE_CMIS = 1,
+};
+
+/**
+ * struct ethtool_module_fw_info - module firmware information
+ * @type: Module firmware information type.
+ * @cmis: CMIS module firmware information.
+ */
+struct ethtool_module_fw_info {
+	enum ethtool_module_fw_info_type type;
+	union {
+		struct ethtool_module_fw_info_cmis cmis;
+	};
+};
+
 /**
  * struct ethtool_ops - optional netdev operations
  * @cap_link_lanes_supported: indicates if the driver supports lanes
@@ -614,6 +679,8 @@ struct ethtool_module_power_mode_params {
  *	plugged-in.
  * @set_module_power_mode: Set the power mode policy for the plug-in module
  *	used by the network device.
+ * @get_module_fw_info: Get the firmware information of the plug-in module
+ *	used by the network device.
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -750,6 +817,9 @@ struct ethtool_ops {
 	int	(*set_module_power_mode)(struct net_device *dev,
 					 const struct ethtool_module_power_mode_params *params,
 					 struct netlink_ext_ack *extack);
+	int	(*get_module_fw_info)(struct net_device *dev,
+				      struct ethtool_module_fw_info *info,
+				      struct netlink_ext_ack *extack);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);
