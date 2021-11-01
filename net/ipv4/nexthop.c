@@ -658,7 +658,7 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static void nh_grp_entry_stats_read(const struct nh_grp_entry *nhge,
+static void nh_grp_entry_stats_read(struct nh_grp_entry *nhge,
 				    struct nh_grp_entry_stats *stats)
 {
 	int i;
@@ -680,7 +680,7 @@ static void nh_grp_entry_stats_read(const struct nh_grp_entry *nhge,
 }
 
 static int nla_put_nh_group_stats_entry(struct sk_buff *skb,
-					const struct nh_grp_entry *nhge)
+					struct nh_grp_entry *nhge)
 {
 	struct nh_grp_entry_stats stats;
 	struct nlattr *nest;
@@ -704,8 +704,7 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int nla_put_nh_group_stats(struct sk_buff *skb,
-				  const struct nh_group *nhg)
+static int nla_put_nh_group_stats(struct sk_buff *skb, struct nh_group *nhg)
 {
 	struct nlattr *nest;
 	int i;
