@@ -679,6 +679,49 @@ static void nh_grp_entry_stats_read(struct nh_grp_entry *nhge,
 	}
 }
 
+static void nh_grp_hw_stats_update(struct nexthop *nh)
+{
+	struct nh_group *nhg = rtnl_dereference(nh->nh_grp);
+	struct nh_notifier_info info = {
+		.net = nh->net,
+	};
+	struct net *net = nh->net;
+	int i, err;
+
+	ASSERT_RTNL();
+
+	if (nexthop_notifiers_is_empty(net))
+		return;
+
+	/* XXX: Initialize notifier info. Put in a fuctnion. */
+	info.id = nh->id;
+	info.type = NH_NOTIFIER_INFO_TYPE_GRP_HW_STATS;
+	info.nh_grp_hw_stats = kzalloc(struct_size(info.nh_grp_hw_stats,
+						   stats, nhg->num_nh),
+				       GFP_KERNEL);
+	if (!info.nh_grp_hw_stats)
+		return;
+	info.nh_grp_hw_stats->num_nh = nhg->num_nh;
+	for (i = 0; i < nhg->num_nh; i++) {
+		struct nh_grp_entry *nhge = &nhg->nh_entries[i];
+
+		info.nh_grp_hw_stats->stats[i].id = nhge->nh->id;
+	}
+
+	err = blocking_notifier_call_chain(&net->nexthop.notifier_chain,
+					   NEXTHOP_EVENT_HW_STATS_GET,
+					   &info);
+
+	/* XXX: Update nexthop group entries. Put in a function. */
+	for (i = 0; i < nhg->num_nh; i++) {
+		struct nh_grp_entry *nhge = &nhg->nh_entries[i];
+
+		nhge->packets_hw += info.nh_grp_hw_stats->stats[i].packets;
+	}
+
+	kfree(info.nh_grp_hw_stats);
+}
+
 static int nla_put_nh_group_stats_entry(struct sk_buff *skb,
 					struct nh_grp_entry *nhge)
 {
@@ -693,7 +736,9 @@ static int nla_put_nh_group_stats_entry(struct sk_buff *skb,
 
 	if (nla_put_u32(skb, NHA_GROUP_STATS_ENTRY_ID, nhge->nh->id) ||
 	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS, stats.packets,
-			      NHA_GROUP_STATS_ENTRY_PAD))
+			      NHA_GROUP_STATS_ENTRY_PAD) ||
+	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS_HW,
+			      nhge->packets_hw, NHA_GROUP_STATS_ENTRY_PAD))
 		goto nla_put_failure;
 
 	nla_nest_end(skb, nest);
@@ -713,6 +758,9 @@ static int nla_put_nh_group_stats(struct sk_buff *skb, struct nexthop *nh)
 	nest = nla_nest_start(skb, NHA_GROUP_STATS);
 	if (!nest)
 		return -EMSGSIZE;
+
+	if (nhg->hw_stats)
+		nh_grp_hw_stats_update(nh);
 
 	for (i = 0; i < nhg->num_nh; i++)
 		if (nla_put_nh_group_stats_entry(skb, &nhg->nh_entries[i]))
