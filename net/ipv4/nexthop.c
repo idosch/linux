@@ -735,7 +735,8 @@ static int nla_put_nh_group_stats_entry(struct sk_buff *skb,
 		return -EMSGSIZE;
 
 	if (nla_put_u32(skb, NHA_GROUP_STATS_ENTRY_ID, nhge->nh->id) ||
-	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS, stats.packets,
+	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS,
+			      stats.packets + nhge->packets_hw,
 			      NHA_GROUP_STATS_ENTRY_PAD) ||
 	    nla_put_u64_64bit(skb, NHA_GROUP_STATS_ENTRY_PACKETS_HW,
 			      nhge->packets_hw, NHA_GROUP_STATS_ENTRY_PAD))
