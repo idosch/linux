@@ -121,7 +121,6 @@ struct nsim_nexthop {
 	u64 occ;
 	u32 id;
 	bool is_resilient;
-	bool hw_stats;
 };
 
 static const struct rhashtable_params nsim_nexthop_ht_params = {
@@ -1119,12 +1118,10 @@ static struct nsim_nexthop *nsim_nexthop_create(struct nsim_fib_data *data,
 	case NH_NOTIFIER_INFO_TYPE_GRP:
 		for (i = 0; i < info->nh_grp->num_nh; i++)
 			occ += info->nh_grp->nh_entries[i].weight;
-		nexthop->hw_stats = info->nh_grp->hw_stats;
 		break;
 	case NH_NOTIFIER_INFO_TYPE_RES_TABLE:
 		occ = info->nh_res_table->num_nh_buckets;
 		nexthop->is_resilient = true;
-		nexthop->hw_stats = info->nh_res_table->hw_stats;
 		break;
 	default:
 		NL_SET_ERR_MSG_MOD(info->extack, "Unsupported nexthop type");
@@ -1251,12 +1248,6 @@ static int nsim_nexthop_insert(struct nsim_fib_data *data,
 	if (IS_ERR(nexthop))
 		return PTR_ERR(nexthop);
 
-	if (nexthop->hw_stats) {
-		NL_SET_ERR_MSG_MOD(info->extack, "Nexthop group hardware statistics are not supported");
-		nsim_nexthop_destroy(nexthop);
-		return -EINVAL;
-	}
-
 	nexthop_old = rhashtable_lookup_fast(&data->nexthop_ht, &info->id,
 					     nsim_nexthop_ht_params);
 	if (!nexthop_old)
@@ -1290,11 +1281,6 @@ static void nsim_nexthop_remove(struct nsim_fib_data *data,
 static int nsim_nexthop_res_table_pre_replace(struct nsim_fib_data *data,
 					      struct nh_notifier_info *info)
 {
-	if (info->nh_grp->hw_stats) {
-		NL_SET_ERR_MSG_MOD(info->extack, "Nexthop group hardware statistics are not supported");
-		return -EINVAL;
-	}
-
 	if (data->fail_res_nexthop_group_replace) {
 		NL_SET_ERR_MSG_MOD(info->extack, "Failed to replace a resilient nexthop group");
 		return -EINVAL;
@@ -1318,6 +1304,18 @@ static int nsim_nexthop_bucket_replace(struct nsim_fib_data *data,
 	return 0;
 }
 
+static void nsim_nexthop_hw_stats_get(struct nsim_fib_data *data,
+				      struct nh_notifier_info *info)
+{
+	int i;
+
+	if (info->type != NH_NOTIFIER_INFO_TYPE_GRP_HW_STATS)
+		return;
+
+	for (i = 0; i < info->nh_grp_hw_stats->num_nh; i++)
+		info->nh_grp_hw_stats->stats[i].packets += i + 1;
+}
+
 static int nsim_nexthop_event_nb(struct notifier_block *nb, unsigned long event,
 				 void *ptr)
 {
@@ -1339,6 +1337,9 @@ static int nsim_nexthop_event_nb(struct notifier_block *nb, unsigned long event,
 		break;
 	case NEXTHOP_EVENT_BUCKET_REPLACE:
 		err = nsim_nexthop_bucket_replace(data, info);
+		break;
+	case NEXTHOP_EVENT_HW_STATS_GET:
+		nsim_nexthop_hw_stats_get(data, info);
 		break;
 	default:
 		break;
