@@ -1242,6 +1242,7 @@ static int nh_check_attr_group(struct net *net,
 		if (!tb[i])
 			continue;
 		switch (i) {
+		case NHA_GROUP_HW_STATS_ENABLE:
 		case NHA_FDB:
 			continue;
 		case NHA_RES_GROUP:
