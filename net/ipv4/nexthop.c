@@ -704,8 +704,9 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int nla_put_nh_group_stats(struct sk_buff *skb, struct nh_group *nhg)
+static int nla_put_nh_group_stats(struct sk_buff *skb, struct nexthop *nh)
 {
+	struct nh_group *nhg = rtnl_dereference(nh->nh_grp);
 	struct nlattr *nest;
 	int i;
 
@@ -725,8 +726,9 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
+static int nla_put_nh_group(struct sk_buff *skb, struct nexthop *nh)
 {
+	struct nh_group *nhg = rtnl_dereference(nh->nh_grp);
 	struct nexthop_grp *p;
 	size_t len = nhg->num_nh * sizeof(*p);
 	struct nlattr *nla;
@@ -757,7 +759,7 @@ static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
 
 	if (nhg->num_nh > 1 &&
 	    (nla_put_u8(skb, NHA_GROUP_HW_STATS_ENABLE, nhg->hw_stats) ||
-	     nla_put_nh_group_stats(skb, nhg)))
+	     nla_put_nh_group_stats(skb, nh)))
 		goto nla_put_failure;
 
 	return 0;
@@ -794,7 +796,7 @@ static int nh_fill_node(struct sk_buff *skb, struct nexthop *nh,
 
 		if (nhg->fdb_nh && nla_put_flag(skb, NHA_FDB))
 			goto nla_put_failure;
-		if (nla_put_nh_group(skb, nhg))
+		if (nla_put_nh_group(skb, nh))
 			goto nla_put_failure;
 		goto out;
 	}
