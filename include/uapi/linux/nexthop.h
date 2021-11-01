@@ -63,6 +63,9 @@ enum {
 	/* nested; nexthop group stats */
 	NHA_GROUP_STATS,
 
+	/* u8; nexthop group hardware stats enable */
+	NHA_GROUP_HW_STATS_ENABLE,
+
 	__NHA_MAX,
 };
 

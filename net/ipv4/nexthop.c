@@ -36,6 +36,7 @@ static const struct nla_policy rtm_nh_policy_new[] = {
 	[NHA_ENCAP]		= { .type = NLA_NESTED },
 	[NHA_FDB]		= { .type = NLA_FLAG },
 	[NHA_RES_GROUP]		= { .type = NLA_NESTED },
+	[NHA_GROUP_HW_STATS_ENABLE]	= NLA_POLICY_MAX(NLA_U8, 1),
 };
 
 static const struct nla_policy rtm_nh_policy_get[] = {
@@ -755,7 +756,9 @@ static int nla_put_nh_group(struct sk_buff *skb, struct nh_group *nhg)
 	if (nhg->resilient && nla_put_nh_group_res(skb, nhg))
 		goto nla_put_failure;
 
-	if (nhg->num_nh > 1 && nla_put_nh_group_stats(skb, nhg))
+	if (nhg->num_nh > 1 &&
+	    (nla_put_u8(skb, NHA_GROUP_HW_STATS_ENABLE, nhg->hw_stats) ||
+	     nla_put_nh_group_stats(skb, nhg)))
 		goto nla_put_failure;
 
 	return 0;
@@ -2578,6 +2581,9 @@ static struct nexthop *nexthop_create_group(struct net *net,
 	if (cfg->nh_fdb)
 		nhg->fdb_nh = 1;
 
+	if (cfg->nh_grp_hw_stats)
+		nhg->hw_stats = true;
+
 	rcu_assign_pointer(nh->nh_grp, nhg);
 
 	return nh;
@@ -2916,6 +2922,10 @@ static int rtm_to_nh_config(struct net *net, struct sk_buff *skb,
 			err = rtm_to_nh_config_grp_res(tb[NHA_RES_GROUP],
 						       cfg, extack);
 
+		if (tb[NHA_GROUP_HW_STATS_ENABLE])
+			cfg->nh_grp_hw_stats =
+				nla_get_u8(tb[NHA_GROUP_HW_STATS_ENABLE]);
+
 		/* no other attributes should be set */
 		goto out;
 	}
@@ -3007,6 +3017,10 @@ static int rtm_to_nh_config(struct net *net, struct sk_buff *skb,
 		goto out;
 	}
 
+	if (tb[NHA_GROUP_HW_STATS_ENABLE]) {
+		NL_SET_ERR_MSG(extack, "Cannot enable nexthop group hardware statistics for non-group nexthops");
+		goto out;
+	}
 
 	err = 0;
 out:
