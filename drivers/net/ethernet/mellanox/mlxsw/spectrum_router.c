@@ -4628,6 +4628,11 @@ mlxsw_sp_nexthop_obj_group_validate(struct mlxsw_sp *mlxsw_sp,
 		return -EINVAL;
 	}
 
+	if (nh_grp->hw_stats) {
+		NL_SET_ERR_MSG_MOD(extack, "Nexthop group hardware statistics are not supported");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < nh_grp->num_nh; i++) {
 		const struct nh_notifier_single_info *nh;
 		int err;
@@ -4692,6 +4697,11 @@ mlxsw_sp_nexthop_obj_res_group_validate(struct mlxsw_sp *mlxsw_sp,
 {
 	int err;
 	u16 i;
+
+	if (nh_res_table->hw_stats) {
+		NL_SET_ERR_MSG_MOD(extack, "Nexthop group hardware statistics are not supported");
+		return -EINVAL;
+	}
 
 	err = mlxsw_sp_nexthop_obj_res_group_size_validate(mlxsw_sp,
 							   nh_res_table,
