@@ -2960,6 +2960,7 @@ struct mlxsw_sp_nexthop {
 	};
 	unsigned int counter_index;
 	bool counter_valid;
+	u64 last_packets;
 };
 
 enum mlxsw_sp_nexthop_group_type {
@@ -4628,11 +4629,6 @@ mlxsw_sp_nexthop_obj_group_validate(struct mlxsw_sp *mlxsw_sp,
 		return -EINVAL;
 	}
 
-	if (nh_grp->hw_stats) {
-		NL_SET_ERR_MSG_MOD(extack, "Nexthop group hardware statistics are not supported");
-		return -EINVAL;
-	}
-
 	for (i = 0; i < nh_grp->num_nh; i++) {
 		const struct nh_notifier_single_info *nh;
 		int err;
@@ -4821,7 +4817,9 @@ mlxsw_sp_nexthop_obj_init(struct mlxsw_sp *mlxsw_sp,
 		break;
 	}
 
-	mlxsw_sp_nexthop_counter_alloc(mlxsw_sp, nh);
+	if (!mlxsw_sp_flow_counter_alloc(mlxsw_sp, &nh->counter_index))
+		nh->counter_valid = true;
+
 	list_add_tail(&nh->router_list_node, &mlxsw_sp->router->nexthop_list);
 	nh->ifindex = dev->ifindex;
 
@@ -5291,6 +5289,39 @@ err_nexthop_obj_init:
 	return err;
 }
 
+static void mlxsw_sp_nexthop_obj_hw_stats_get(struct mlxsw_sp *mlxsw_sp,
+					      struct nh_notifier_info *info)
+{
+	struct mlxsw_sp_nexthop_group_info *nhgi;
+	struct mlxsw_sp_nexthop_group *nh_grp;
+	int i;
+
+	if (info->type != NH_NOTIFIER_INFO_TYPE_GRP_HW_STATS)
+		return;
+
+	nh_grp = mlxsw_sp_nexthop_obj_group_lookup(mlxsw_sp, info->id);
+	if (!nh_grp)
+		return;
+	nhgi = nh_grp->nhgi;
+
+	if (nhgi->count != info->nh_grp_hw_stats->num_nh)
+		return;
+
+	for (i = 0; i < info->nh_grp_hw_stats->num_nh; i++) {
+		struct mlxsw_sp_nexthop *nh;
+		u64 packets;
+		int err;
+
+		nh = &nhgi->nexthops[i];
+		err = mlxsw_sp_nexthop_counter_get(mlxsw_sp, nh, &packets);
+		if (err)
+			continue;
+		info->nh_grp_hw_stats->stats[i].packets +=
+			packets - nh->last_packets;
+		nh->last_packets = packets;
+	}
+}
+
 static int mlxsw_sp_nexthop_obj_event(struct notifier_block *nb,
 				      unsigned long event, void *ptr)
 {
@@ -5315,6 +5346,9 @@ static int mlxsw_sp_nexthop_obj_event(struct notifier_block *nb,
 	case NEXTHOP_EVENT_BUCKET_REPLACE:
 		err = mlxsw_sp_nexthop_obj_bucket_replace(router->mlxsw_sp,
 							  info);
+		break;
+	case NEXTHOP_EVENT_HW_STATS_GET:
+		mlxsw_sp_nexthop_obj_hw_stats_get(router->mlxsw_sp, info);
 		break;
 	default:
 		break;
