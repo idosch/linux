@@ -137,6 +137,40 @@ nsim_set_fecparam(struct net_device *dev, struct ethtool_fecparam *fecparam)
 	return 0;
 }
 
+static int nsim_get_module_fw_info(struct net_device *dev,
+				   struct ethtool_module_fw_info *info,
+				   struct netlink_ext_ack *extack)
+{
+	info->type = ETHTOOL_MODULE_FW_INFO_TYPE_CMIS;
+
+	info->cmis.a_present = true;
+	info->cmis.a.running = true;
+	info->cmis.a.committed = true;
+	info->cmis.a.valid = true;
+	info->cmis.a.ver_major = 1;
+	info->cmis.a.ver_minor = 2;
+	info->cmis.a.ver_build = 3;
+	strcpy(info->cmis.a.ver_extra_str, "test");
+
+	info->cmis.b_present = true;
+	info->cmis.b.running = false;
+	info->cmis.b.committed = false;
+	info->cmis.b.valid = true;
+	info->cmis.b.ver_major = 5;
+	info->cmis.b.ver_minor = 6;
+	info->cmis.b.ver_build = 7;
+
+	info->cmis.factory_present = true;
+	info->cmis.factory.running = false;
+	info->cmis.factory.committed = false;
+	info->cmis.factory.valid = true;
+	info->cmis.factory.ver_major = 11;
+	info->cmis.factory.ver_minor = 12;
+	info->cmis.factory.ver_build = 13;
+
+	return 0;
+}
+
 static const struct ethtool_ops nsim_ethtool_ops = {
 	.supported_coalesce_params	= ETHTOOL_COALESCE_ALL_PARAMS,
 	.get_pause_stats	        = nsim_get_pause_stats,
@@ -150,6 +184,7 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.set_channels			= nsim_set_channels,
 	.get_fecparam			= nsim_get_fecparam,
 	.set_fecparam			= nsim_set_fecparam,
+	.get_module_fw_info		= nsim_get_module_fw_info,
 };
 
 static void nsim_ethtool_ring_init(struct netdevsim *ns)
