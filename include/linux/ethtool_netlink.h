@@ -29,6 +29,9 @@ int ethnl_cable_test_amplitude(struct phy_device *phydev, u8 pair, s16 mV);
 int ethnl_cable_test_pulse(struct phy_device *phydev, u16 mV);
 int ethnl_cable_test_step(struct phy_device *phydev, u32 first, u32 last,
 			  u32 step);
+void
+ethnl_module_fw_flash_ntf(struct net_device *dev,
+			  const struct ethtool_module_fw_flash_ntf_params *params);
 #else
 static inline int ethnl_cable_test_alloc(struct phy_device *phydev, u8 cmd)
 {
@@ -69,6 +72,12 @@ static inline int ethnl_cable_test_step(struct phy_device *phydev, u32 first,
 					u32 last, u32 step)
 {
 	return -EOPNOTSUPP;
+}
+
+static inline void
+ethnl_module_fw_flash_ntf(struct net_device *dev,
+			  const struct ethtool_module_fw_flash_ntf_params *params)
+{
 }
 #endif /* IS_ENABLED(CONFIG_ETHTOOL_NETLINK) */
 #endif /* _LINUX_ETHTOOL_NETLINK_H_ */

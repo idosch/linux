@@ -380,3 +380,128 @@ const struct ethnl_request_ops ethnl_module_fw_info_request_ops = {
 	.reply_size		= module_fw_info_reply_size,
 	.fill_reply		= module_fw_info_fill_reply,
 };
+
+/* MODULE_FW_FLASH_ACT */
+
+const struct nla_policy
+ethnl_module_fw_flash_act_policy[ETHTOOL_A_MODULE_FW_FLASH_COMMIT + 1] = {
+	[ETHTOOL_A_MODULE_FW_FLASH_HEADER] =
+		NLA_POLICY_NESTED(ethnl_header_policy),
+	[ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME] = { .type = NLA_NUL_STRING },
+	[ETHTOOL_A_MODULE_FW_FLASH_PASS] = { .type = NLA_U32 },
+	[ETHTOOL_A_MODULE_FW_FLASH_COMMIT] = NLA_POLICY_MAX(NLA_U8, 1),
+};
+
+static int module_flash_fw(struct net_device *dev, struct nlattr **tb,
+			   struct netlink_ext_ack *extack)
+{
+	struct ethtool_module_fw_flash_params params = {};
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+
+	if (!ops->start_fw_flash_module) {
+		NL_SET_ERR_MSG(extack,
+			       "Flashing module firmware is not supported by this device");
+		return -EOPNOTSUPP;
+	}
+
+	/* Firmware image file name is only optional when committing the
+	 * currently running firmware.
+	 */
+	if (!tb[ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME] &&
+	    (!tb[ETHTOOL_A_MODULE_FW_FLASH_COMMIT] ||
+	     !nla_get_u8(tb[ETHTOOL_A_MODULE_FW_FLASH_COMMIT]))) {
+		NL_SET_ERR_MSG(extack, "Missing firmware file name");
+		return -EINVAL;
+	}
+
+	if (tb[ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME])
+		params.file_name =
+			nla_data(tb[ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME]);
+
+	if (tb[ETHTOOL_A_MODULE_FW_FLASH_COMMIT])
+		params.commit =
+			nla_get_u8(tb[ETHTOOL_A_MODULE_FW_FLASH_COMMIT]);
+
+	if (tb[ETHTOOL_A_MODULE_FW_FLASH_PASS]) {
+		params.pass = nla_get_u32(tb[ETHTOOL_A_MODULE_FW_FLASH_PASS]);
+		params.pass_valid = true;
+	}
+
+	return ops->start_fw_flash_module(dev, &params, extack);
+}
+
+int ethnl_act_module_fw_flash(struct sk_buff *skb, struct genl_info *info)
+{
+	struct ethnl_req_info req_info = {};
+	struct nlattr **tb = info->attrs;
+	struct net_device *dev;
+	int ret;
+
+	ret = ethnl_parse_header_dev_get(&req_info,
+					 tb[ETHTOOL_A_MODULE_FW_FLASH_HEADER],
+					 genl_info_net(info), info->extack,
+					 true);
+	if (ret < 0)
+		return ret;
+	dev = req_info.dev;
+
+	rtnl_lock();
+	ret = ethnl_ops_begin(dev);
+	if (ret < 0)
+		goto out_rtnl;
+
+	ret = module_flash_fw(dev, tb, info->extack);
+
+	ethnl_ops_complete(dev);
+
+out_rtnl:
+	rtnl_unlock();
+	dev_put(dev);
+	return ret;
+}
+
+void
+ethnl_module_fw_flash_ntf(struct net_device *dev,
+			  const struct ethtool_module_fw_flash_ntf_params *params)
+{
+	struct sk_buff *skb;
+	void *hdr;
+	int ret;
+
+	skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
+	if (!skb)
+		return;
+
+	hdr = ethnl_bcastmsg_put(skb, ETHTOOL_MSG_MODULE_FW_FLASH_NTF);
+	if (!hdr)
+		goto err_skb;
+
+	ret = ethnl_fill_reply_header(skb, dev,
+				      ETHTOOL_A_MODULE_FW_FLASH_HEADER);
+	if (ret < 0)
+		goto err_skb;
+
+	if (nla_put_u8(skb, ETHTOOL_A_MODULE_FW_FLASH_STATUS, params->status))
+		goto err_skb;
+
+	if (params->status_msg &&
+	    nla_put_string(skb, ETHTOOL_A_MODULE_FW_FLASH_STATUS_MSG,
+			   params->status_msg))
+		goto err_skb;
+
+	if (nla_put_u64_64bit(skb, ETHTOOL_A_MODULE_FW_FLASH_DONE, params->done,
+			      ETHTOOL_A_MODULE_FW_FLASH_PAD))
+		goto err_skb;
+
+	if (nla_put_u64_64bit(skb, ETHTOOL_A_MODULE_FW_FLASH_TOTAL,
+			      params->total, ETHTOOL_A_MODULE_FW_FLASH_PAD))
+		goto err_skb;
+
+	genlmsg_end(skb, hdr);
+	ethnl_multicast(skb, dev);
+	return;
+
+err_skb:
+	nlmsg_free(skb);
+}
+EXPORT_SYMBOL_GPL(ethnl_module_fw_flash_ntf);

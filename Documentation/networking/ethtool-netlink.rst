@@ -221,6 +221,7 @@ Userspace to kernel:
   ``ETHTOOL_MSG_MODULE_SET``            set transceiver module parameters
   ``ETHTOOL_MSG_MODULE_GET``            get transceiver module parameters
   ``ETHTOOL_MSG_MODULE_FW_INFO_GET``    get transceiver module firmware info
+  ``ETHTOOL_MSG_MODULE_FW_FLASH_ACT``   flash transceiver module firmware
   ===================================== ====================================
 
 Kernel to userspace:
@@ -262,6 +263,7 @@ Kernel to userspace:
   ``ETHTOOL_MSG_PHC_VCLOCKS_GET_REPLY``    PHC virtual clocks info
   ``ETHTOOL_MSG_MODULE_GET_REPLY``         transceiver module parameters
   ``ETHTOOL_MSG_MODULE_FW_INFO_GET_REPLY`` transceiver module firmware info
+  ``ETHTOOL_MSG_MODULE_FW_FLASH_NTF``      transceiver module flash updates
   ======================================== =================================
 
 ``GET`` requests are sent by userspace applications to retrieve device
@@ -1661,6 +1663,63 @@ For CMIS modules, the above mentioned information can be queried from the
 module using CDB CMD 0100h (Get Firmware Info). See section 9.7.1 in revision
 5.0 of the specification.
 
+MODULE_FW_FLASH_ACT
+===================
+
+Flashes transceiver module firmware.
+
+Request contents:
+
+  =======================================  ======  ===========================
+  ``ETHTOOL_A_MODULE_FW_FLASH_HEADER``     nested  request header
+  ``ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME``  string  firmware image file name
+  ``ETHTOOL_A_MODULE_FW_FLASH_PASS``       u32     transceiver module password
+  ``ETHTOOL_A_MODULE_FW_FLASH_COMMIT``     u8      commit firmware image
+  =======================================  ======  ===========================
+
+The optional ``ETHTOOL_A_MODULE_FW_FLASH_FILE_NAME`` attribute encodes the
+firmware image file name.
+
+The optional ``ETHTOOL_A_MODULE_FW_FLASH_PASS`` attribute encodes a password
+that might be required as part of the transceiver module firmware update
+process.
+
+The optional ``ETHTOOL_A_MODULE_FW_FLASH_COMMIT`` attribute is used to control
+whether the running firmware image is committed. That is, if the image is to be
+run upon reset. When not specified or not set, the specified firmware image
+(mandatory) is downloaded to the transceiver module and run, but not committed.
+This allows user space to make sure only valid images are committed.
+
+The firmware update process can take several minutes to complete. Therefore,
+during the update process notifications are emitted from the kernel to user
+space updating it about the status and progress.
+
+Notification contents:
+
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_FLASH_HEADER``              | nested | reply header   |
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_FLASH_STATUS``              | u8     | status         |
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_FLASH_STATUS_MSG``          | string | status message |
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_FLASH_DONE``                | u64    | progress       |
+ +---------------------------------------------------+--------+----------------+
+ | ``ETHTOOL_A_MODULE_FW_FLASH_TOTAL``               | u64    | total          |
+ +---------------------------------------------------+--------+----------------+
+
+The ``ETHTOOL_A_MODULE_FW_FLASH_STATUS`` attribute encodes the current status
+of the firmware update process. Possible values are:
+
+.. kernel-doc:: include/uapi/linux/ethtool.h
+    :identifiers: ethtool_module_fw_flash_status
+
+The ``ETHTOOL_A_MODULE_FW_FLASH_STATUS_MSG`` attribute encodes a status message
+string.
+
+The ``ETHTOOL_A_MODULE_FW_FLASH_DONE`` and ``ETHTOOL_A_MODULE_FW_FLASH_TOTAL``
+attributes encode the completed and total amount of work, respectively.
+
 Request translation
 ===================
 
@@ -1763,4 +1822,5 @@ are netlink only.
   n/a                                 ``ETHTOOL_MSG_MODULE_GET``
   n/a                                 ``ETHTOOL_MSG_MODULE_SET``
   n/a                                 ``ETHTOOL_MSG_MODULE_FW_INFO_GET``
+  n/a                                 ``ETHTOOL_MSG_MODULE_FW_FLASH_ACT``
   =================================== =====================================

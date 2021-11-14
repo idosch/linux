@@ -509,6 +509,37 @@ struct ethtool_module_fw_info {
 };
 
 /**
+ * struct ethtool_module_fw_flash_params - module firmware flashing parameters
+ * @file_name: Firmware image file name. Can be NULL when committing an
+ *	existing image. That is, not downloading and running a new one.
+ * @pass: Module password. Only valid when @pass_valid is set.
+ * @commit: Whether to commit the currently running firmware or not. If set and
+ *	@file_name is not NULL, the specified firmware image file needs to be
+ *	downloaded, run and committed.
+ * @pass_valid: Whether the module password is valid or not.
+ */
+struct ethtool_module_fw_flash_params {
+	const char *file_name;
+	u32 pass;
+	u8 commit:1,
+	   pass_valid:1;
+};
+
+/**
+ * struct ethtool_module_fw_flash_ntf_params - module firmware flashing notification parameters
+ * @status: Module firmware flashing status.
+ * @status_msg: Module firmware flashing status message.
+ * @done: Amount of work completed of total amount.
+ * @total: Amount of work expected to be done.
+ */
+struct ethtool_module_fw_flash_ntf_params {
+	enum ethtool_module_fw_flash_status status;
+	const char *status_msg;
+	u64 done;
+	u64 total;
+};
+
+/**
  * struct ethtool_ops - optional netdev operations
  * @cap_link_lanes_supported: indicates if the driver supports lanes
  *	parameter.
@@ -681,6 +712,11 @@ struct ethtool_module_fw_info {
  *	used by the network device.
  * @get_module_fw_info: Get the firmware information of the plug-in module
  *	used by the network device.
+ * @start_fw_flash_module: Start firmware flashing of the plug-in module used
+ *	by the network device. Device drivers are expected to defer the
+ *	operation to avoid holding RTNL for long periods of time and to allow
+ *	multiple modules to be flashed simultaneously. User space can be
+ *	notified about the progress by calling ethnl_module_fw_flash_ntf().
  *
  * All operations are optional (i.e. the function pointer may be set
  * to %NULL) and callers must take this into account.  Callers must
@@ -820,6 +856,9 @@ struct ethtool_ops {
 	int	(*get_module_fw_info)(struct net_device *dev,
 				      struct ethtool_module_fw_info *info,
 				      struct netlink_ext_ack *extack);
+	int	(*start_fw_flash_module)(struct net_device *dev,
+					 const struct ethtool_module_fw_flash_params *params,
+					 struct netlink_ext_ack *extack);
 };
 
 int ethtool_check_ops(const struct ethtool_ops *ops);
