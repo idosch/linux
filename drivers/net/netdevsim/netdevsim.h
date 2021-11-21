@@ -16,6 +16,7 @@
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/ethtool.h>
+#include <linux/firmware.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/netdevice.h>
@@ -59,14 +60,23 @@ struct nsim_ethtool_pauseparam {
 	bool report_stats_tx;
 };
 
+struct nsim_ethtool_module_fw {
+	struct ethtool_module_fw_flash_params params;
+	struct work_struct work;
+	const struct firmware *fw;
+	bool in_progress;
+};
+
 struct nsim_ethtool {
 	u32 get_err;
 	u32 set_err;
 	u32 channels;
 	struct nsim_ethtool_pauseparam pauseparam;
+	struct nsim_ethtool_module_fw module_fw;
 	struct ethtool_coalesce coalesce;
 	struct ethtool_ringparam ring;
 	struct ethtool_fecparam fec;
+
 };
 
 struct netdevsim {

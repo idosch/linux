@@ -3,6 +3,8 @@
 
 #include <linux/debugfs.h>
 #include <linux/ethtool.h>
+#include <linux/ethtool_netlink.h>
+#include <linux/firmware.h>
 #include <linux/random.h>
 
 #include "netdevsim.h"
@@ -171,6 +173,127 @@ static int nsim_get_module_fw_info(struct net_device *dev,
 	return 0;
 }
 
+static void nsim_module_fw_flash_download(struct netdevsim *ns)
+{
+	struct ethtool_module_fw_flash_ntf_params params = {};
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_IN_PROGRESS;
+	params.status_msg = "Downloading firmware image";
+	params.done = 0;
+	params.total = 1500;
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+
+	params.done = 750;
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+
+	params.done = 1500;
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+}
+
+static void nsim_module_fw_flash_validate(struct netdevsim *ns)
+{
+	struct ethtool_module_fw_flash_ntf_params params = {};
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_IN_PROGRESS;
+	params.status_msg = "Validating firmware image download";
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+}
+
+static void nsim_module_fw_flash_run(struct netdevsim *ns)
+{
+	struct ethtool_module_fw_flash_ntf_params params = {};
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_IN_PROGRESS;
+	params.status_msg = "Running firmware image";
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+}
+
+static void nsim_module_fw_flash_commit(struct netdevsim *ns)
+{
+	struct ethtool_module_fw_flash_ntf_params params = {};
+
+	if (!ns->ethtool.module_fw.params.commit)
+		return;
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_IN_PROGRESS;
+	params.status_msg = "Committing firmware image";
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	msleep(5000);
+}
+
+static void nsim_module_fw_flash(struct work_struct *work)
+{
+	struct ethtool_module_fw_flash_ntf_params params = {};
+	struct netdevsim *ns;
+
+	ns = container_of(work, struct netdevsim, ethtool.module_fw.work);
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_STARTED;
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	if (!ns->ethtool.module_fw.fw)
+		goto commit;
+
+	nsim_module_fw_flash_download(ns);
+	nsim_module_fw_flash_validate(ns);
+	nsim_module_fw_flash_run(ns);
+commit:
+	nsim_module_fw_flash_commit(ns);
+
+	params.status = ETHTOOL_MODULE_FW_FLASH_STATUS_COMPLETED;
+	ethnl_module_fw_flash_ntf(ns->netdev, &params);
+
+	dev_put(ns->netdev);
+	rtnl_lock();
+	ns->ethtool.module_fw.in_progress = false;
+	rtnl_unlock();
+	release_firmware(ns->ethtool.module_fw.fw);
+}
+
+static int
+nsim_start_fw_flash_module(struct net_device *dev,
+			   const struct ethtool_module_fw_flash_params *params,
+			   struct netlink_ext_ack *extack)
+{
+	struct netdevsim *ns = netdev_priv(dev);
+
+	if (ns->ethtool.module_fw.in_progress) {
+		NL_SET_ERR_MSG(extack, "Module firmware flashing already in progress");
+		return -EBUSY;
+	}
+
+	ns->ethtool.module_fw.fw = NULL;
+	if (params->file_name) {
+		int err;
+
+		err = request_firmware(&ns->ethtool.module_fw.fw,
+				       params->file_name, &dev->dev);
+		if (err) {
+			NL_SET_ERR_MSG(extack,
+				       "Failed to request module firmware image");
+			return err;
+		}
+	}
+
+	ns->ethtool.module_fw.in_progress = true;
+	dev_hold(dev);
+	ns->ethtool.module_fw.params = *params;
+	schedule_work(&ns->ethtool.module_fw.work);
+
+	return 0;
+}
+
 static const struct ethtool_ops nsim_ethtool_ops = {
 	.supported_coalesce_params	= ETHTOOL_COALESCE_ALL_PARAMS,
 	.get_pause_stats	        = nsim_get_pause_stats,
@@ -185,6 +308,7 @@ static const struct ethtool_ops nsim_ethtool_ops = {
 	.get_fecparam			= nsim_get_fecparam,
 	.set_fecparam			= nsim_set_fecparam,
 	.get_module_fw_info		= nsim_get_module_fw_info,
+	.start_fw_flash_module		= nsim_start_fw_flash_module,
 };
 
 static void nsim_ethtool_ring_init(struct netdevsim *ns)
@@ -228,4 +352,9 @@ void nsim_ethtool_init(struct netdevsim *ns)
 			   &ns->ethtool.ring.rx_mini_max_pending);
 	debugfs_create_u32("tx_max_pending", 0600, dir,
 			   &ns->ethtool.ring.tx_max_pending);
+
+	/* The work item holds a reference on the netdev, so its unregistration
+	 * cannot be completed while the work is queued or executing.
+	 */
+	INIT_WORK(&ns->ethtool.module_fw.work, nsim_module_fw_flash);
 }
