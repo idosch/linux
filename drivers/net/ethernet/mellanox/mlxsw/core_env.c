@@ -1159,6 +1159,28 @@ static void mlxsw_env_line_cards_free(struct mlxsw_env *env)
 }
 
 static int
+mlxsw_env_module_event_enable(struct mlxsw_env *mlxsw_env, u8 slot_index)
+{
+	int err;
+
+	err = mlxsw_env_module_oper_state_event_enable(mlxsw_env->core,
+						       slot_index);
+	if (err)
+		return err;
+
+	err = mlxsw_env_module_temp_event_enable(mlxsw_env->core, slot_index);
+	if (err)
+		return err;
+
+	return 0;
+}
+
+static void
+mlxsw_env_module_event_disable(struct mlxsw_env *mlxsw_env, u8 slot_index)
+{
+}
+
+static int
 mlxsw_env_module_type_set(struct mlxsw_core *mlxsw_core, u8 slot_index)
 {
 	struct mlxsw_env *mlxsw_env = mlxsw_core_env(mlxsw_core);
@@ -1230,13 +1252,13 @@ int mlxsw_env_init(struct mlxsw_core *mlxsw_core, struct mlxsw_env **p_env)
 	 * is to be set after line card is activated.
 	 */
 	env->line_cards[0]->module_count = num_of_slots ? 0 : module_count;
-	err = mlxsw_env_module_oper_state_event_enable(mlxsw_core, 0);
+	/* Enable events only for main board. Line card events are to be
+	 * configured only after line card is activated. Before that, access to
+	 * modules on line cards is not allowed.
+	 */
+	err = mlxsw_env_module_event_enable(env, 0);
 	if (err)
-		goto err_oper_state_event_enable;
-
-	err = mlxsw_env_module_temp_event_enable(mlxsw_core, 0);
-	if (err)
-		goto err_temp_event_enable;
+		goto err_mlxsw_env_module_event_enable;
 
 	err = mlxsw_env_module_type_set(mlxsw_core, 0);
 	if (err)
@@ -1245,8 +1267,8 @@ int mlxsw_env_init(struct mlxsw_core *mlxsw_core, struct mlxsw_env **p_env)
 	return 0;
 
 err_type_set:
-err_temp_event_enable:
-err_oper_state_event_enable:
+	mlxsw_env_module_event_disable(env, 0);
+err_mlxsw_env_module_event_enable:
 	mlxsw_env_module_plug_event_unregister(env);
 err_module_plug_event_register:
 	mlxsw_env_temp_warn_event_unregister(env);
@@ -1260,6 +1282,7 @@ err_mlxsw_env_line_cards_alloc:
 
 void mlxsw_env_fini(struct mlxsw_env *env)
 {
+	mlxsw_env_module_event_disable(env, 0);
 	mlxsw_env_module_plug_event_unregister(env);
 	/* Make sure there is no more event work scheduled. */
 	mlxsw_core_flush_owq();
