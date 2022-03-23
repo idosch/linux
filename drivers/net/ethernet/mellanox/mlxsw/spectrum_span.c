@@ -425,6 +425,10 @@ mlxsw_sp_span_gretap4_route(const struct net_device *to_dev,
 	ip_tunnel_init_flow(&fl4, parms.iph.protocol, *daddrp, *saddrp,
 			    0, 0, parms.link, tun->fwmark, 0);
 
+	/* legacy VRF / l3mdev behavior */
+	if (netif_index_is_l3_port_rcu(dev_net(to_dev), tun->parms.link))
+		fl4.flowi4_flags |= FLOWI_FLAG_SKIP_NH_OIF;
+
 	rt = ip_route_output_key(tun->net, &fl4);
 	if (IS_ERR(rt))
 		return NULL;

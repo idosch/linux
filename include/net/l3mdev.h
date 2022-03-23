@@ -159,6 +159,17 @@ static inline bool netif_index_is_l3_master(struct net *net, int ifindex)
 	return rc;
 }
 
+static inline bool netif_index_is_l3_port_rcu(struct net *net, int ifindex)
+{
+	struct net_device *dev;
+
+	if (ifindex == 0)
+		return false;
+
+	dev = dev_get_by_index_rcu(net, ifindex);
+	return dev ? netif_is_l3_slave(dev) : false;
+}
+
 struct dst_entry *l3mdev_link_scope_lookup(struct net *net, struct flowi6 *fl6);
 
 static inline
@@ -265,6 +276,11 @@ static inline u32 l3mdev_fib_table_by_index(struct net *net, int ifindex)
 }
 
 static inline bool netif_index_is_l3_master(struct net *net, int ifindex)
+{
+	return false;
+}
+
+static inline bool netif_index_is_l3_port_rcu(struct net *net, int ifindex)
 {
 	return false;
 }

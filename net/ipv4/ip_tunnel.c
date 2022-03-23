@@ -729,6 +729,10 @@ void ip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev,
 			    tunnel->parms.o_key, RT_TOS(tos), tunnel->parms.link,
 			    tunnel->fwmark, skb_get_hash(skb));
 
+	/* legacy VRF / l3mdev behavior */
+	if (netif_index_is_l3_port_rcu(dev_net(dev), tunnel->parms.link))
+		fl4.flowi4_flags |= FLOWI_FLAG_SKIP_NH_OIF;
+
 	if (ip_tunnel_encap(skb, tunnel, &protocol, &fl4) < 0)
 		goto tx_error;
 
