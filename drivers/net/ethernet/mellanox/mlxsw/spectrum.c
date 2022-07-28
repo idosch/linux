@@ -3851,7 +3851,10 @@ mlxsw_sp_params_acl_region_rehash_intrvl_get(struct devlink *devlink, u32 id,
 	struct mlxsw_core *mlxsw_core = devlink_priv(devlink);
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
 
-	ctx->val.vu32 = mlxsw_sp_acl_region_rehash_intrvl_get(mlxsw_sp);
+	if (devlink_is_reload_failed(devlink))
+		ctx->val.vu32 = 0;
+	else
+		ctx->val.vu32 = mlxsw_sp_acl_region_rehash_intrvl_get(mlxsw_sp);
 	return 0;
 }
 
@@ -3861,6 +3864,9 @@ mlxsw_sp_params_acl_region_rehash_intrvl_set(struct devlink *devlink, u32 id,
 {
 	struct mlxsw_core *mlxsw_core = devlink_priv(devlink);
 	struct mlxsw_sp *mlxsw_sp = mlxsw_core_driver_priv(mlxsw_core);
+
+	if (devlink_is_reload_failed(devlink))
+		return -EINVAL;
 
 	return mlxsw_sp_acl_region_rehash_intrvl_set(mlxsw_sp, ctx->val.vu32);
 }
