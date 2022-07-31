@@ -2176,6 +2176,7 @@ err_event_enable:
 	mlxsw_sp->ports = NULL;
 	return err;
 }
+ALLOW_ERROR_INJECTION(mlxsw_sp_ports_create, ERRNO);
 
 static int mlxsw_sp_port_module_info_init(struct mlxsw_sp *mlxsw_sp)
 {
