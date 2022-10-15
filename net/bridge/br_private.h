@@ -105,6 +105,7 @@ struct br_mdb_config {
 	struct br_ip			group;
 	bool				src_entry;
 	u8				filter_mode;
+	u8				rt_protocol;
 	struct list_head		src_list;
 };
 #endif
