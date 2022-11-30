@@ -107,6 +107,7 @@ struct br_mdb_config {
 	struct br_mdb_src_entry		*src_entries;
 	int				num_src_entries;
 	u8				rt_protocol;
+	u32				nlflags;
 };
 #endif
 
