@@ -974,14 +974,12 @@ void br_multicast_uninit_stats(struct net_bridge *br);
 void br_multicast_get_stats(const struct net_bridge *br,
 			    const struct net_bridge_port *p,
 			    struct br_mcast_stats *dest);
-int br_mdb_add_new(struct net_device *dev, struct nlattr *tb[], u16 nlmsg_flags,
-		   struct netlink_ext_ack *extack);
-int br_mdb_del_new(struct net_device *dev, struct nlattr *tb[],
-		   struct netlink_ext_ack *extack);
-int br_mdb_dump_new(struct net_device *dev, struct sk_buff *skb,
-		    struct netlink_callback *cb);
-void br_mdb_init(void);
-void br_mdb_uninit(void);
+int br_mdb_add(struct net_device *dev, struct nlattr *tb[], u16 nlmsg_flags,
+	       struct netlink_ext_ack *extack);
+int br_mdb_del(struct net_device *dev, struct nlattr *tb[],
+	       struct netlink_ext_ack *extack);
+int br_mdb_dump(struct net_device *dev, struct sk_buff *skb,
+		struct netlink_callback *cb);
 void br_multicast_host_join(const struct net_bridge_mcast *brmctx,
 			    struct net_bridge_mdb_entry *mp, bool notify);
 void br_multicast_host_leave(struct net_bridge_mdb_entry *mp, bool notify);
@@ -1373,31 +1371,22 @@ static inline bool br_multicast_querier_exists(struct net_bridge_mcast *brmctx,
 	return false;
 }
 
-static inline int br_mdb_add_new(struct net_device *dev, struct nlattr *tb[],
-				 u16 nlmsg_flags,
-				 struct netlink_ext_ack *extack)
+static inline int br_mdb_add(struct net_device *dev, struct nlattr *tb[],
+			     u16 nlmsg_flags, struct netlink_ext_ack *extack)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int br_mdb_del_new(struct net_device *dev, struct nlattr *tb[],
-				 struct netlink_ext_ack *extack)
+static inline int br_mdb_del(struct net_device *dev, struct nlattr *tb[],
+			     struct netlink_ext_ack *extack)
 {
 	return -EOPNOTSUPP;
 }
 
-static inline int br_mdb_dump_new(struct net_device *dev, struct sk_buff *skb,
-				  struct netlink_callback *cb)
+static inline int br_mdb_dump(struct net_device *dev, struct sk_buff *skb,
+			      struct netlink_callback *cb)
 {
 	return 0;
-}
-
-static inline void br_mdb_init(void)
-{
-}
-
-static inline void br_mdb_uninit(void)
-{
 }
 
 static inline int br_mdb_hash_init(struct net_bridge *br)
