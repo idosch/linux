@@ -87,6 +87,7 @@ int gro_cells_init(struct gro_cells *gcells, struct net_device *dev)
 	return 0;
 }
 EXPORT_SYMBOL(gro_cells_init);
+ALLOW_ERROR_INJECTION(gro_cells_init, ERRNO);
 
 struct percpu_free_defer {
 	struct rcu_head rcu;
