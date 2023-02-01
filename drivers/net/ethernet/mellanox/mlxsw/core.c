@@ -2185,6 +2185,7 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 			goto err_devlink_alloc;
 		}
 		devl_lock(devlink);
+		devl_register(devlink);
 	}
 
 	mlxsw_core = devlink_priv(devlink);
@@ -2268,10 +2269,8 @@ __mlxsw_core_bus_device_register(const struct mlxsw_bus_info *mlxsw_bus_info,
 			goto err_driver_init;
 	}
 
-	if (!reload) {
+	if (!reload)
 		devl_unlock(devlink);
-		devlink_register(devlink);
-	}
 	return 0;
 
 err_driver_init:
@@ -2303,6 +2302,7 @@ err_register_resources:
 err_bus_init:
 	mlxsw_core_irq_event_handler_fini(mlxsw_core);
 	if (!reload) {
+		devl_unregister(devlink);
 		devl_unlock(devlink);
 		devlink_free(devlink);
 	}
@@ -2341,10 +2341,8 @@ void mlxsw_core_bus_device_unregister(struct mlxsw_core *mlxsw_core,
 {
 	struct devlink *devlink = priv_to_devlink(mlxsw_core);
 
-	if (!reload) {
-		devlink_unregister(devlink);
+	if (!reload)
 		devl_lock(devlink);
-	}
 
 	if (devlink_is_reload_failed(devlink)) {
 		if (!reload)
@@ -2373,6 +2371,7 @@ void mlxsw_core_bus_device_unregister(struct mlxsw_core *mlxsw_core,
 	mlxsw_core->bus->fini(mlxsw_core->bus_priv);
 	mlxsw_core_irq_event_handler_fini(mlxsw_core);
 	if (!reload) {
+		devl_unregister(devlink);
 		devl_unlock(devlink);
 		devlink_free(devlink);
 	}
@@ -2382,6 +2381,7 @@ void mlxsw_core_bus_device_unregister(struct mlxsw_core *mlxsw_core,
 reload_fail_deinit:
 	mlxsw_core_params_unregister(mlxsw_core);
 	devl_resources_unregister(devlink);
+	devl_unregister(devlink);
 	devl_unlock(devlink);
 	devlink_free(devlink);
 }
