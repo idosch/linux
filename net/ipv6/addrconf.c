@@ -1134,6 +1134,11 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 	ifa->rt = f6i;
 
 	ifa->idev = idev;
+	if (cfg->has_ifa_label)
+		memcpy(ifa->ifa_label, cfg->ifa_label, sizeof(cfg->ifa_label));
+	else
+		memcpy(ifa->ifa_label, idev->dev->name, IFNAMSIZ);
+
 	in6_dev_hold(idev);
 
 	/* For caller */
@@ -3000,6 +3005,7 @@ static int inet6_addr_add(struct net *net, int ifindex,
 }
 
 static int inet6_addr_del(struct net *net, int ifindex, u32 ifa_flags,
+			  const char *ifa_label,
 			  const struct in6_addr *pfx, unsigned int plen)
 {
 	struct inet6_ifaddr *ifp;
@@ -3019,6 +3025,8 @@ static int inet6_addr_del(struct net *net, int ifindex, u32 ifa_flags,
 
 	read_lock_bh(&idev->lock);
 	list_for_each_entry(ifp, &idev->addr_list, if_list) {
+		if (ifa_label && strcmp(ifp->ifa_label, ifa_label))
+			continue;
 		if (ifp->prefix_len == plen &&
 		    ipv6_addr_equal(pfx, &ifp->addr)) {
 			in6_ifa_hold(ifp);
@@ -3079,7 +3087,7 @@ int addrconf_del_ifaddr(struct net *net, void __user *arg)
 		return -EFAULT;
 
 	rtnl_lock();
-	err = inet6_addr_del(net, ireq.ifr6_ifindex, 0, &ireq.ifr6_addr,
+	err = inet6_addr_del(net, ireq.ifr6_ifindex, 0, NULL, &ireq.ifr6_addr,
 			     ireq.ifr6_prefixlen);
 	rtnl_unlock();
 	return err;
@@ -4691,7 +4699,7 @@ inet6_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	/* We ignore other flags so far. */
 	ifa_flags &= IFA_F_MANAGETEMPADDR;
 
-	return inet6_addr_del(net, ifm->ifa_index, ifa_flags, pfx,
+	return inet6_addr_del(net, ifm->ifa_index, ifa_flags, NULL, pfx,
 			      ifm->ifa_prefixlen);
 }
 
@@ -4792,6 +4800,8 @@ static int inet6_addr_modify(struct net *net, struct inet6_ifaddr *ifp,
 
 	if (cfg->rt_priority && cfg->rt_priority != ifp->rt_priority)
 		ifp->rt_priority = cfg->rt_priority;
+	if (cfg->has_ifa_label)
+		memcpy(ifp->ifa_label, cfg->ifa_label, IFNAMSIZ);
 
 	if (new_peer)
 		ifp->peer_addr = *cfg->peer_pfx;

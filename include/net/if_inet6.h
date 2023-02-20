@@ -83,6 +83,7 @@ struct inet6_ifaddr {
 
 	struct rcu_head		rcu;
 	struct in6_addr		peer_addr;
+	char			ifa_label[IFNAMSIZ];
 };
 
 struct ip6_sf_socklist {

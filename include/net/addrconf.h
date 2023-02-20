@@ -73,6 +73,8 @@ struct ifa6_config {
 	u32			preferred_lft;
 	u32			valid_lft;
 	u16			scope;
+	char			ifa_label[IFNAMSIZ];
+	bool			has_ifa_label;
 };
 
 int addrconf_init(void);
