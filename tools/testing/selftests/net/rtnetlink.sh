@@ -1249,6 +1249,88 @@ kci_test_bridge_parent_id()
 	echo "PASS: bridge_parent_id"
 }
 
+address_get_label()
+{
+	local addr=$1; shift
+
+	ip -j address show dev "$devdummy" |
+	    jq -e -r --arg addr "${addr%/*}" \
+	       '.[].addr_info[] | select(.local == $addr) | .label'
+}
+
+do_test_address_label()
+{
+	local what=$1; shift
+	local addr=$1; shift
+	local label
+	local ret=0
+	local msg
+	local err
+
+	# Test adding an address with a pre-set label.
+	msg=$(ip address add dev "$devdummy" "$addr" label foo 2>&1)
+	err=$?
+	if [[ "$err" -ne 0 && "${msg/be prefixed/}" != "${msg}" ]]; then
+		echo "SKIP: ip does not support arbitrary ip address labels."
+		return $ksft_skip
+	fi
+	check_err $err
+	label=$(address_get_label "$addr")
+	check_err $?
+	[[ "$label" == "foo" ]]
+	check_err $?
+
+	# When deleting an address, if label is given at all, it must match
+	# the label at the deleted address.
+	ip address del dev "$devdummy" "$addr" label bar 2>/dev/null
+	check_fail $?
+	ip address del dev "$devdummy" "$addr" label foo
+	check_err $?
+
+	# When no label is given, it defaults to the name of the netdevice.
+	ip address add dev "$devdummy" "$addr"
+	label=$(address_get_label "$addr")
+	check_err $?
+	[[ "$label" == "$devdummy" ]]
+	check_err $?
+
+	# Setting a label to empty string effectively deletes it -- it is
+	# not reported through netlink.
+	ip address replace dev "$devdummy" "$addr" label ''
+	label=$(address_get_label "$addr")
+	check_fail $?
+
+	# It is possible to set label explicitly.
+	ip address replace dev "$devdummy" "$addr" label foo
+	label=$(address_get_label "$addr")
+	check_err $?
+	[[ "$label" == "foo" ]]
+	check_err $?
+
+	# An address with a label can be deleted without giving a label.
+	ip address del dev "$devdummy" "$addr"
+	check_err $?
+
+	if [ $ret -ne 0 ]; then
+		echo "FAIL: address label $what"
+		return 1
+	fi
+	echo "PASS: address label $what"
+}
+
+kci_test_address_label()
+{
+	local ret=0
+
+	do_test_address_label IPv4 192.0.2.1/28
+	check_err $?
+
+	do_test_address_label IPv6 2001:db8:1::1/64
+	check_err $?
+
+	return $ret
+}
+
 kci_test_rtnl()
 {
 	local current_test
