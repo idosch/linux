@@ -4671,6 +4671,7 @@ static const struct nla_policy ifa_ipv6_policy[IFA_MAX+1] = {
 	[IFA_RT_PRIORITY]	= { .len = sizeof(u32) },
 	[IFA_TARGET_NETNSID]	= { .type = NLA_S32 },
 	[IFA_PROTO]		= { .type = NLA_U8 },
+	[IFA_LABEL]		= { .type = NLA_STRING, .len = IFNAMSIZ - 1 },
 };
 
 static int
@@ -4681,6 +4682,7 @@ inet6_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct ifaddrmsg *ifm;
 	struct nlattr *tb[IFA_MAX+1];
 	struct in6_addr *pfx, *peer_pfx;
+	const char *ifa_label;
 	u32 ifa_flags;
 	int err;
 
@@ -4695,11 +4697,12 @@ inet6_rtm_deladdr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	ifa_flags = tb[IFA_FLAGS] ? nla_get_u32(tb[IFA_FLAGS]) : ifm->ifa_flags;
+	ifa_label = tb[IFA_LABEL] ? nla_data(tb[IFA_LABEL]) : NULL;
 
 	/* We ignore other flags so far. */
 	ifa_flags &= IFA_F_MANAGETEMPADDR;
 
-	return inet6_addr_del(net, ifm->ifa_index, ifa_flags, NULL, pfx,
+	return inet6_addr_del(net, ifm->ifa_index, ifa_flags, ifa_label, pfx,
 			      ifm->ifa_prefixlen);
 }
 
@@ -4915,6 +4918,11 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	else
 		cfg.ifa_flags = ifm->ifa_flags;
 
+	if (tb[IFA_LABEL]) {
+		nla_strscpy(cfg.ifa_label, tb[IFA_LABEL], IFNAMSIZ);
+		cfg.has_ifa_label = true;
+	}
+
 	/* We ignore other flags so far. */
 	cfg.ifa_flags &= IFA_F_NODAD | IFA_F_HOMEADDRESS |
 			 IFA_F_MANAGETEMPADDR | IFA_F_NOPREFIXROUTE |
@@ -4999,7 +5007,9 @@ static inline int inet6_ifaddr_msgsize(void)
 	       + nla_total_size(sizeof(struct ifa_cacheinfo))
 	       + nla_total_size(4)  /* IFA_FLAGS */
 	       + nla_total_size(1)  /* IFA_PROTO */
-	       + nla_total_size(4)  /* IFA_RT_PRIORITY */;
+	       + nla_total_size(4)  /* IFA_RT_PRIORITY */
+	       + nla_total_size(IFNAMSIZ) /* IFA_LABEL */
+	       ;
 }
 
 enum addr_type_t {
@@ -5080,6 +5090,10 @@ static int inet6_fill_ifaddr(struct sk_buff *skb, struct inet6_ifaddr *ifa,
 
 	if (ifa->ifa_proto &&
 	    nla_put_u8(skb, IFA_PROTO, ifa->ifa_proto))
+		goto error;
+
+	if (ifa->ifa_label[0] &&
+	    nla_put_string(skb, IFA_LABEL, ifa->ifa_label))
 		goto error;
 
 	nlmsg_end(skb, nlh);
