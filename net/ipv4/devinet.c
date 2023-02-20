@@ -823,6 +823,7 @@ static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
 
 static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 				       __u32 *pvalid_lft, __u32 *pprefered_lft,
+				       const struct nlattr **at_label,
 				       struct netlink_ext_ack *extack)
 {
 	struct nlattr *tb[IFA_MAX+1];
@@ -885,6 +886,8 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 		nla_strscpy(ifa->ifa_label, tb[IFA_LABEL], IFNAMSIZ);
 	else
 		memcpy(ifa->ifa_label, dev->name, IFNAMSIZ);
+	if (at_label)
+		*at_label = tb[IFA_LABEL];
 
 	if (tb[IFA_RT_PRIORITY])
 		ifa->ifa_rt_priority = nla_get_u32(tb[IFA_RT_PRIORITY]);
@@ -933,6 +936,7 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 			    struct netlink_ext_ack *extack)
 {
 	struct net *net = sock_net(skb->sk);
+	const struct nlattr *at_label;
 	struct in_ifaddr *ifa;
 	struct in_ifaddr *ifa_existing;
 	__u32 valid_lft = INFINITY_LIFE_TIME;
@@ -940,7 +944,8 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	ASSERT_RTNL();
 
-	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &prefered_lft, extack);
+	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &prefered_lft, &at_label,
+			    extack);
 	if (IS_ERR(ifa))
 		return PTR_ERR(ifa);
 
@@ -974,6 +979,9 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 			fib_modify_prefix_metric(ifa, new_metric);
 			ifa->ifa_rt_priority = new_metric;
 		}
+
+		if (at_label)
+			nla_strscpy(ifa->ifa_label, at_label, IFNAMSIZ);
 
 		set_ifa_lifetime(ifa, valid_lft, prefered_lft);
 		cancel_delayed_work(&check_lifetime_work);
