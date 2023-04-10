@@ -2185,11 +2185,32 @@ static void mlxsw_pci_remove(struct pci_dev *pdev)
 	kfree(mlxsw_pci);
 }
 
+static void mlxsw_pci_reset_prepare(struct pci_dev *pdev)
+{
+	struct mlxsw_pci *mlxsw_pci = pci_get_drvdata(pdev);
+
+	mlxsw_core_bus_device_unregister(mlxsw_pci->core, false);
+}
+
+static void mlxsw_pci_reset_done(struct pci_dev *pdev)
+{
+	struct mlxsw_pci *mlxsw_pci = pci_get_drvdata(pdev);
+
+	mlxsw_core_bus_device_register(&mlxsw_pci->bus_info, &mlxsw_pci_bus,
+				       mlxsw_pci, false, NULL, NULL);
+}
+
+static const struct pci_error_handlers mlxsw_pci_err_handler = {
+	.reset_prepare = mlxsw_pci_reset_prepare,
+	.reset_done = mlxsw_pci_reset_done,
+};
+
 int mlxsw_pci_driver_register(struct pci_driver *pci_driver)
 {
 	pci_driver->probe = mlxsw_pci_probe;
 	pci_driver->remove = mlxsw_pci_remove;
 	pci_driver->shutdown = mlxsw_pci_remove;
+	pci_driver->err_handler = &mlxsw_pci_err_handler;
 	return pci_register_driver(pci_driver);
 }
 EXPORT_SYMBOL(mlxsw_pci_driver_register);
