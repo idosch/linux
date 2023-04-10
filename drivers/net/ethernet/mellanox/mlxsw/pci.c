@@ -1574,7 +1574,6 @@ static int mlxsw_pci_reset_at_pci_disable(struct mlxsw_pci *mlxsw_pci)
 	 * it after the firmware was reset.
 	 */
 	pci_save_state(pdev);
-	pci_cfg_access_lock(pdev);
 
 	err = mlxsw_pci_link_toggle(bridge_pdev);
 	if (err) {
@@ -1585,7 +1584,6 @@ static int mlxsw_pci_reset_at_pci_disable(struct mlxsw_pci *mlxsw_pci)
 	err = mlxsw_pci_device_id_read(pdev, dev_id);
 
 restore:
-	pci_cfg_access_unlock(pdev);
 	pci_restore_state(pdev);
 	return err;
 }
