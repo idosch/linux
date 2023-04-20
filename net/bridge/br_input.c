@@ -46,6 +46,8 @@ static int br_pass_frame_up(struct sk_buff *skb)
 	 */
 	br_switchdev_frame_unmark(skb);
 
+	skb->l2_miss = BR_INPUT_SKB_CB(skb)->miss;
+
 	/* Bridge is just like any other port.  Make sure the
 	 * packet is allowed except in promisc mode when someone
 	 * may be running packet capture.

@@ -50,6 +50,8 @@ int br_dev_queue_push_xmit(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	br_switchdev_frame_set_offload_fwd_mark(skb);
 
+	skb->l2_miss = BR_INPUT_SKB_CB(skb)->miss;
+
 	dev_queue_xmit(skb);
 
 	return 0;
@@ -203,6 +205,8 @@ void br_flood(struct net_bridge *br, struct sk_buff *skb,
 	struct net_bridge_port *prev = NULL;
 	struct net_bridge_port *p;
 
+	BR_INPUT_SKB_CB(skb)->miss = 1;
+
 	list_for_each_entry_rcu(p, &br->port_list, list) {
 		/* Do not flood unicast traffic to ports that turn it off, nor
 		 * other traffic if flood off, except for traffic we originate
@@ -295,6 +299,7 @@ void br_multicast_flood(struct net_bridge_mdb_entry *mdst,
 			allow_mode_include = false;
 	} else {
 		p = NULL;
+		BR_INPUT_SKB_CB(skb)->miss = 1;
 	}
 
 	while (p || rp) {
