@@ -295,11 +295,6 @@ static int mlxsw_sp_flower_parse_meta(struct mlxsw_sp_acl_rule_info *rulei,
 
 	flow_rule_match_meta(rule, &match);
 
-	if (match.mask->l2_miss) {
-		NL_SET_ERR_MSG_MOD(f->common.extack, "Can't match on \"l2_miss\"");
-		return -EOPNOTSUPP;
-	}
-
 	if (match.mask->ingress_ifindex != 0xFFFFFFFF) {
 		NL_SET_ERR_MSG_MOD(f->common.extack, "Unsupported ingress ifindex mask");
 		return -EINVAL;
@@ -327,6 +322,21 @@ static int mlxsw_sp_flower_parse_meta(struct mlxsw_sp_acl_rule_info *rulei,
 				       MLXSW_AFK_ELEMENT_SRC_SYS_PORT,
 				       mlxsw_sp_port->local_port,
 				       0xFFFFFFFF);
+
+	/* This is a two bits key in hardware with the following values:
+	 * 00b - Known multicast.
+	 * 01b - Broadcast.
+	 * 10b - Known unicast.
+	 * 11b - Unknown unicast or unregistered multicast.
+	 *
+	 * When 'l2_miss' is set we need to match on 01b or 11b. Therefore,
+	 * only match on the LSB in order to differentiate between both cases
+	 * of 'l2_miss'.
+	 */
+	mlxsw_sp_acl_rulei_keymask_u32(rulei, MLXSW_AFK_ELEMENT_DMAC_TYPE,
+				       match.key->l2_miss,
+				       match.mask->l2_miss & BIT(0));
+
 	return 0;
 }
 
