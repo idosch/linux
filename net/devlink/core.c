@@ -4,6 +4,7 @@
  * Copyright (c) 2016 Jiri Pirko <jiri@mellanox.com>
  */
 
+#include <linux/device.h>
 #include <net/genetlink.h>
 
 #include "devl_internal.h"
@@ -204,6 +205,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (ret < 0)
 		goto err_xa_alloc;
 
+	get_device(dev);
 	devlink->dev = dev;
 	devlink->ops = ops;
 	xa_init_flags(&devlink->ports, XA_FLAGS_ALLOC);
@@ -258,6 +260,8 @@ void devlink_free(struct devlink *devlink)
 	xa_destroy(&devlink->snapshot_ids);
 	xa_destroy(&devlink->params);
 	xa_destroy(&devlink->ports);
+
+	put_device(devlink->dev);
 
 	xa_erase(&devlinks, devlink->index);
 
