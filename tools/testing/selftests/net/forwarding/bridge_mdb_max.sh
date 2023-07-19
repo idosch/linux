@@ -1328,6 +1328,12 @@ test_8021qvs()
 	switch_destroy
 }
 
+bridge link help 2>&1 | grep -q "mcast_max_groups"
+if [ $? -ne 0 ]; then
+	echo "SKIP: iproute2 too old, missing bridge \"mcast_max_groups\" support"
+	exit $ksft_skip
+fi
+
 trap cleanup EXIT
 
 setup_prepare
