@@ -1206,6 +1206,12 @@ ctrl_test()
 	ctrl_mldv2_is_in_test
 }
 
+bridge mdb help 2>&1 | grep -q "replace"
+if [ $? -ne 0 ]; then
+	echo "SKIP: iproute2 too old, missing bridge mdb replace support"
+	exit $ksft_skip
+fi
+
 trap cleanup EXIT
 
 setup_prepare
