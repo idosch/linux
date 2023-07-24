@@ -278,6 +278,8 @@ cleanup()
 	h1_destroy
 }
 
+skip_on_veth
+
 trap cleanup EXIT
 
 setup_prepare
