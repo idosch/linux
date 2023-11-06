@@ -6483,12 +6483,19 @@ static int rtnl_mdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
-	if (!dev->netdev_ops->ndo_mdb_del) {
-		NL_SET_ERR_MSG(extack, "Device does not support MDB operations");
-		return -EOPNOTSUPP;
+	if (del_bulk) {
+		if (!dev->netdev_ops->ndo_mdb_del_bulk) {
+			NL_SET_ERR_MSG(extack, "Device does not support MDB bulk deletion");
+			return -EOPNOTSUPP;
+		}
+		return dev->netdev_ops->ndo_mdb_del_bulk(dev, tb, extack);
+	} else {
+		if (!dev->netdev_ops->ndo_mdb_del) {
+			NL_SET_ERR_MSG(extack, "Device does not support MDB operations");
+			return -EOPNOTSUPP;
+		}
+		return dev->netdev_ops->ndo_mdb_del(dev, tb, extack);
 	}
-
-	return dev->netdev_ops->ndo_mdb_del(dev, tb, extack);
 }
 
 /* Process one rtnetlink message. */
