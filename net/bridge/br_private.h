@@ -110,6 +110,14 @@ struct br_mdb_config {
 	int				num_src_entries;
 	u8				rt_protocol;
 };
+
+struct br_mdb_flush_desc {
+	u32 port_ifindex;
+	u16 vid;
+	u8 rt_protocol;
+	u8 state;
+	u8 state_mask;
+};
 #endif
 
 /* net_bridge_mcast_port must be always defined due to forwarding stubs */
@@ -1020,6 +1028,8 @@ int br_mdb_add(struct net_device *dev, struct nlattr *tb[], u16 nlmsg_flags,
 	       struct netlink_ext_ack *extack);
 int br_mdb_del(struct net_device *dev, struct nlattr *tb[],
 	       struct netlink_ext_ack *extack);
+int br_mdb_del_bulk(struct net_device *dev, struct nlattr *tb[],
+		    struct netlink_ext_ack *extack);
 int br_mdb_dump(struct net_device *dev, struct sk_buff *skb,
 		struct netlink_callback *cb);
 int br_mdb_get(struct net_device *dev, struct nlattr *tb[], u32 portid, u32 seq,
@@ -1424,6 +1434,12 @@ static inline int br_mdb_add(struct net_device *dev, struct nlattr *tb[],
 
 static inline int br_mdb_del(struct net_device *dev, struct nlattr *tb[],
 			     struct netlink_ext_ack *extack)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int br_mdb_del_bulk(struct net_device *dev, struct nlattr *tb[],
+				  struct netlink_ext_ack *extack)
 {
 	return -EOPNOTSUPP;
 }
