@@ -365,10 +365,15 @@ check_err()
 {
 	local err=$1
 	local msg=$2
+	local nret
 
-	if [[ $RET -eq 0 && $err -ne 0 ]]; then
-		RET=$err
-		retmsg=$msg
+	if ((err)); then
+		nret=$ksft_fail
+
+		if ((!RET || nret < RET)); then
+			RET=$nret
+			retmsg=$msg
+		fi
 	fi
 }
 
@@ -377,10 +382,7 @@ check_fail()
 	local err=$1
 	local msg=$2
 
-	if [[ $RET -eq 0 && $err -eq 0 ]]; then
-		RET=1
-		retmsg=$msg
-	fi
+	check_err $((!err)) "$msg"
 }
 
 check_err_fail()
