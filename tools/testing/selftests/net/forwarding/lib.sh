@@ -33,6 +33,21 @@ net_forwarding_dir=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")
 
 if [[ -f $net_forwarding_dir/forwarding.config ]]; then
 	source "$net_forwarding_dir/forwarding.config"
+
+elif (( $# == 0 )); then # When command-line arguments are passed,
+			 # the file may not be necessary.
+
+	cat >/dev/stderr <<-EOF
+	WARNING: $net_forwarding_dir/forwarding.config not found.
+	         Please add a suitable forwarding.config.
+	EOF
+
+	if [[ -f $net_forwarding_dir/forwarding.config.sample ]]; then
+		cat >/dev/stderr <<-EOF
+		         Using forwarding.config.sample instead.
+		EOF
+		source "$net_forwarding_dir/forwarding.config.sample"
+	fi
 fi
 
 source "$net_forwarding_dir/../lib.sh"
