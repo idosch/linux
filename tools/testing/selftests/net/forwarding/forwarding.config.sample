@@ -60,3 +60,7 @@ NETIF_NO_CABLE=eth8
 # IPv6 traceroute utility name.
 #TROUTE6=traceroute6
 
+# Whether the machine is "slow" -- i.e. might be incapable of running tests
+# involving heavy traffic. This might be the case on a debug kernel, a VM, or
+# e.g. a low-power board.
+#KSFT_MACHINE_SLOW=no

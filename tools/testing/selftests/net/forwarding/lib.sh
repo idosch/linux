@@ -28,6 +28,7 @@
 : ${STABLE_MAC_ADDRS:=no}
 : ${TCPDUMP_EXTRA_FLAGS:=}
 : ${TROUTE6:=traceroute6}
+: ${KSFT_MACHINE_SLOW:=no}
 
 net_forwarding_dir=$(dirname "$(readlink -e "${BASH_SOURCE[0]}")")
 
@@ -369,7 +370,12 @@ check_err()
 	local nret
 
 	if ((err)); then
-		nret=$ksft_fail
+		if [[ $PERF_SENSITIVE_TEST = yes && \
+		      $KSFT_MACHINE_SLOW = yes ]]; then
+			nret=$ksft_xfail
+		else
+			nret=$ksft_fail
+		fi
 
 		if ((!RET || nret < RET)); then
 			RET=$nret
@@ -397,6 +403,11 @@ check_err_fail()
 	else
 		check_err $err "$what failed"
 	fi
+}
+
+perf_sensitive()
+{
+	PERF_SENSITIVE_TEST=yes "$@"
 }
 
 log_test_result()
