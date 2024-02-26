@@ -357,7 +357,8 @@ done
 # Helpers
 
 # Exit status to return at the end. Set in case one of the tests fails.
-EXIT_STATUS=0
+EXIT_STATUS=$ksft_skip
+
 # Per-test return value. Clear at the beginning of each test.
 RET=0
 
@@ -398,6 +399,57 @@ check_err_fail()
 	fi
 }
 
+log_test_result()
+{
+	local result=$1; shift
+	local retmsg=$1; shift
+
+	printf "TEST: %-60s  [%s]\n" "$test_name $opt_str" "$result"
+	if [[ $retmsg ]]; then
+		printf "\t%s\n" "$retmsg"
+	fi
+}
+
+pause_on_fail()
+{
+	if [[ $PAUSE_ON_FAIL == yes ]]; then
+		echo "Hit enter to continue, 'q' to quit"
+		read a
+		[[ $a == q ]] && exit 1
+	fi
+}
+
+handle_test_result_pass()
+{
+	log_test_result " OK "
+}
+
+handle_test_result_fail()
+{
+	log_test_result FAIL "$retmsg"
+	pause_on_fail
+	return 1
+}
+
+handle_test_result_xfail()
+{
+	log_test_result XFAIL "$retmsg"
+	pause_on_fail
+}
+
+handle_test_result_skip()
+{
+	log_test_result SKIP "$retmsg"
+}
+
+exit_status_weight()
+{
+	local exit_status=$1; shift
+
+	# exit status weight: SKIP:0 PASS:1 XFAIL:3 XPASS:4 FAIL:5
+	echo $((exit_status == ksft_fail ? 5 : (exit_status + 1) % 5))
+}
+
 log_test()
 {
 	local test_name=$1
@@ -407,31 +459,27 @@ log_test()
 		opt_str="($opt_str)"
 	fi
 
-	if [[ $RET -ne 0 ]]; then
-		EXIT_STATUS=1
-		printf "TEST: %-60s  [FAIL]\n" "$test_name $opt_str"
-		if [[ ! -z "$retmsg" ]]; then
-			printf "\t%s\n" "$retmsg"
-		fi
-		if [ "${PAUSE_ON_FAIL}" = "yes" ]; then
-			echo "Hit enter to continue, 'q' to quit"
-			read a
-			[ "$a" = "q" ] && exit 1
-		fi
-		return 1
+	if ((RET == ksft_pass)); then
+		handle_test_result_pass
+	elif ((RET == ksft_xfail)); then
+		handle_test_result_xfail
+	elif ((RET == ksft_skip)); then
+		handle_test_result_skip
+	else
+		handle_test_result_fail
 	fi
 
-	printf "TEST: %-60s  [ OK ]\n" "$test_name $opt_str"
+	if [[ $(exit_status_weight $RET) > \
+	      $(exit_status_weight $EXIT_STATUS) ]]; then
+		EXIT_STATUS=$RET
+	fi
+
 	return 0
 }
 
 log_test_skip()
 {
-	local test_name=$1
-	local opt_str=$2
-
-	printf "TEST: %-60s  [SKIP]\n" "$test_name $opt_str"
-	return 0
+	RET=$ksft_skip log_test "$@"
 }
 
 log_info()
