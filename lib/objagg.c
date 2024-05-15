@@ -8,6 +8,8 @@
 #include <linux/list.h>
 #include <linux/sort.h>
 #include <linux/objagg.h>
+#include <linux/refcount.h>
+#include <linux/refcount_types.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/objagg.h>
@@ -18,7 +20,7 @@ struct objagg_hints {
 	struct list_head node_list;
 	unsigned int node_count;
 	unsigned int root_count;
-	unsigned int refcount;
+	refcount_t refcount;
 	const struct objagg_ops *ops;
 };
 
@@ -62,22 +64,12 @@ struct objagg_obj {
 		void *root_priv; /* user root private */
 	};
 	unsigned int root_id;
-	unsigned int refcount; /* counts number of users of this object
-				* including nested objects
-				*/
+	refcount_t refcount; /* counts number of users of this object including
+			      * nested objects
+			      */
 	struct objagg_obj_stats stats;
 	unsigned long obj[];
 };
-
-static unsigned int objagg_obj_ref_inc(struct objagg_obj *objagg_obj)
-{
-	return ++objagg_obj->refcount;
-}
-
-static unsigned int objagg_obj_ref_dec(struct objagg_obj *objagg_obj)
-{
-	return --objagg_obj->refcount;
-}
 
 static void objagg_obj_stats_inc(struct objagg_obj *objagg_obj)
 {
@@ -181,10 +173,10 @@ static int objagg_obj_parent_assign(struct objagg *objagg,
 	objagg_obj->parent = parent;
 	objagg_obj->delta_priv = delta_priv;
 	if (take_parent_ref)
-		objagg_obj_ref_inc(objagg_obj->parent);
+		refcount_inc(&objagg_obj->parent->refcount);
 	trace_objagg_obj_parent_assign(objagg, objagg_obj,
 				       parent,
-				       parent->refcount);
+				       refcount_read(&parent->refcount));
 	return 0;
 }
 
@@ -216,7 +208,7 @@ static void objagg_obj_parent_unassign(struct objagg *objagg,
 {
 	trace_objagg_obj_parent_unassign(objagg, objagg_obj,
 					 objagg_obj->parent,
-					 objagg_obj->parent->refcount);
+					 refcount_read(&objagg_obj->parent->refcount));
 	objagg->ops->delta_destroy(objagg->priv, objagg_obj->delta_priv);
 	__objagg_obj_put(objagg, objagg_obj->parent);
 }
@@ -373,7 +365,7 @@ static struct objagg_obj *objagg_obj_create(struct objagg *objagg, void *obj)
 			     GFP_KERNEL);
 	if (!objagg_obj)
 		return ERR_PTR(-ENOMEM);
-	objagg_obj_ref_inc(objagg_obj);
+	refcount_set(&objagg_obj->refcount, 1);
 	memcpy(objagg_obj->obj, obj, objagg->ops->obj_size);
 
 	err = objagg_obj_init(objagg, objagg_obj);
@@ -406,7 +398,7 @@ static struct objagg_obj *__objagg_obj_get(struct objagg *objagg, void *obj)
 	 */
 	objagg_obj = objagg_obj_lookup(objagg, obj);
 	if (objagg_obj) {
-		objagg_obj_ref_inc(objagg_obj);
+		refcount_inc(&objagg_obj->refcount);
 		return objagg_obj;
 	}
 
@@ -445,7 +437,8 @@ struct objagg_obj *objagg_obj_get(struct objagg *objagg, void *obj)
 	if (IS_ERR(objagg_obj))
 		return objagg_obj;
 	objagg_obj_stats_inc(objagg_obj);
-	trace_objagg_obj_get(objagg, objagg_obj, objagg_obj->refcount);
+	trace_objagg_obj_get(objagg, objagg_obj,
+			     refcount_read(&objagg_obj->refcount));
 	return objagg_obj;
 }
 EXPORT_SYMBOL(objagg_obj_get);
@@ -465,7 +458,7 @@ static void objagg_obj_destroy(struct objagg *objagg,
 static void __objagg_obj_put(struct objagg *objagg,
 			     struct objagg_obj *objagg_obj)
 {
-	if (!objagg_obj_ref_dec(objagg_obj))
+	if (refcount_dec_and_test(&objagg_obj->refcount))
 		objagg_obj_destroy(objagg, objagg_obj);
 }
 
@@ -480,7 +473,8 @@ static void __objagg_obj_put(struct objagg *objagg,
  */
 void objagg_obj_put(struct objagg *objagg, struct objagg_obj *objagg_obj)
 {
-	trace_objagg_obj_put(objagg, objagg_obj, objagg_obj->refcount);
+	trace_objagg_obj_put(objagg, objagg_obj,
+			     refcount_read(&objagg_obj->refcount));
 	objagg_obj_stats_dec(objagg_obj);
 	__objagg_obj_put(objagg, objagg_obj);
 }
@@ -531,7 +525,7 @@ struct objagg *objagg_create(const struct objagg_ops *ops,
 	objagg->ops = ops;
 	if (objagg_hints) {
 		objagg->hints = objagg_hints;
-		objagg_hints->refcount++;
+		refcount_inc(&objagg_hints->refcount);
 	}
 	objagg->priv = priv;
 	INIT_LIST_HEAD(&objagg->obj_list);
@@ -935,7 +929,7 @@ struct objagg_hints *objagg_hints_get(struct objagg *objagg,
 		return ERR_PTR(-ENOMEM);
 
 	objagg_hints->ops = objagg->ops;
-	objagg_hints->refcount = 1;
+	refcount_set(&objagg_hints->refcount, 1);
 
 	INIT_LIST_HEAD(&objagg_hints->node_list);
 
@@ -978,7 +972,7 @@ EXPORT_SYMBOL(objagg_hints_get);
  */
 void objagg_hints_put(struct objagg_hints *objagg_hints)
 {
-	if (--objagg_hints->refcount)
+	if (!refcount_dec_and_test(&objagg_hints->refcount))
 		return;
 	objagg_hints_flush(objagg_hints);
 	rhashtable_destroy(&objagg_hints->node_ht);
