@@ -62,6 +62,7 @@
 #include <net/fib_rules.h>
 #include <linux/netconf.h>
 #include <net/rtnh.h>
+#include <net/inet_dscp.h>
 
 #include <linux/nospec.h>
 
@@ -2081,6 +2082,7 @@ static struct mr_table *ipmr_rt_fib_lookup(struct net *net, struct sk_buff *skb)
 		.daddr = iph->daddr,
 		.saddr = iph->saddr,
 		.flowi4_tos = RT_TOS(iph->tos),
+		.dscp = inet_dsfield_to_dscp(iph->tos),
 		.flowi4_oif = (rt_is_output_route(rt) ?
 			       skb->dev->ifindex : 0),
 		.flowi4_iif = (rt_is_output_route(rt) ?

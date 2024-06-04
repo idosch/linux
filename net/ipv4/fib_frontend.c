@@ -294,6 +294,7 @@ __be32 fib_compute_spec_dst(struct sk_buff *skb)
 			.flowi4_l3mdev = l3mdev_master_ifindex_rcu(dev),
 			.daddr = ip_hdr(skb)->saddr,
 			.flowi4_tos = ip_hdr(skb)->tos & IPTOS_RT_MASK,
+			.dscp = inet_dsfield_to_dscp(ip_hdr(skb)->tos),
 			.flowi4_scope = scope,
 			.flowi4_mark = vmark ? skb->mark : 0,
 		};

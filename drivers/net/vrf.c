@@ -25,6 +25,7 @@
 #include <linux/spinlock_types.h>
 
 #include <linux/inetdevice.h>
+#include <net/inet_dscp.h>
 #include <net/arp.h>
 #include <net/ip.h>
 #include <net/ip_fib.h>
@@ -521,6 +522,7 @@ static netdev_tx_t vrf_process_v4_outbound(struct sk_buff *skb,
 	fl4.flowi4_l3mdev = vrf_dev->ifindex;
 	fl4.flowi4_iif = LOOPBACK_IFINDEX;
 	fl4.flowi4_tos = RT_TOS(ip4h->tos);
+	fl4.dscp = inet_dsfield_to_dscp(ip4h->tos);
 	fl4.flowi4_flags = FLOWI_FLAG_ANYSRC;
 	fl4.flowi4_proto = ip4h->protocol;
 	fl4.daddr = ip4h->daddr;
