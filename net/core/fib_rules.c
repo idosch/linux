@@ -14,6 +14,7 @@
 #include <net/sock.h>
 #include <net/fib_rules.h>
 #include <net/ip_tunnels.h>
+#include <net/dscp.h>
 #include <linux/indirect_call_wrapper.h>
 
 #if defined(CONFIG_IPV6) && defined(CONFIG_IPV6_MULTIPLE_TABLES)
@@ -37,7 +38,7 @@ static const struct fib_kuid_range fib_kuid_range_unset = {
 bool fib_rule_matchall(const struct fib_rule *rule)
 {
 	if (rule->iifindex || rule->oifindex || rule->mark || rule->tun_id ||
-	    rule->flags)
+	    rule->flags || rule->dscp_mask)
 		return false;
 	if (rule->suppress_ifgroup != -1 || rule->suppress_prefixlen != -1)
 		return false;
@@ -483,6 +484,12 @@ static struct fib_rule *rule_find(struct fib_rules_ops *ops,
 						 &rule->dport_range))
 			continue;
 
+		if (rule->dscp_mask && r->dscp_mask != rule->dscp_mask)
+			continue;
+
+		if (rule->dscp_mask && r->dscp != rule->dscp)
+			continue;
+
 		if (!ops->compare(r, frh, tb))
 			continue;
 		return r;
@@ -511,6 +518,21 @@ static int fib_nl2rule_l3mdev(struct nlattr *nla, struct fib_rule *nlrule,
 	return -1;
 }
 #endif
+
+static int fib_nl2rule_dscp(const struct fib_rule_hdr *frh,
+			    const struct nlattr *nla, struct fib_rule *nlrule,
+			    struct netlink_ext_ack *extack)
+{
+	if (frh->tos) {
+		NL_SET_ERR_MSG(extack, "Cannot specify both TOS and DSCP");
+		return -EINVAL;
+	}
+
+	nlrule->dscp = inet_dsfield_to_dscp(nla_get_u8(nla) << 2);
+	nlrule->dscp_mask = (DSCP_MAX - 1) << 2;
+
+	return 0;
+}
 
 static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		       struct netlink_ext_ack *extack,
@@ -671,6 +693,10 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		}
 	}
 
+	if (tb[FRA_DSCP] &&
+	    fib_nl2rule_dscp(frh, tb[FRA_DSCP], nlrule, extack) < 0)
+		goto errout_free;
+
 	*rule = nlrule;
 
 	return 0;
@@ -739,6 +765,12 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 
 		if (!fib_rule_port_range_compare(&r->dport_range,
 						 &rule->dport_range))
+			continue;
+
+		if (r->dscp_mask != rule->dscp_mask)
+			continue;
+
+		if (r->dscp != rule->dscp)
 			continue;
 
 		if (!ops->compare(r, frh, tb))
@@ -995,7 +1027,8 @@ static inline size_t fib_rule_nlmsg_size(struct fib_rules_ops *ops,
 			 + nla_total_size(1) /* FRA_PROTOCOL */
 			 + nla_total_size(1) /* FRA_IP_PROTO */
 			 + nla_total_size(sizeof(struct fib_rule_port_range)) /* FRA_SPORT_RANGE */
-			 + nla_total_size(sizeof(struct fib_rule_port_range)); /* FRA_DPORT_RANGE */
+			 + nla_total_size(sizeof(struct fib_rule_port_range)) /* FRA_DPORT_RANGE */
+			 + nla_total_size(sizeof(u8));	/* FRA_DSCP */
 
 	if (ops->nlmsg_payload)
 		payload += ops->nlmsg_payload(rule);
@@ -1065,7 +1098,8 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 	     nla_put_port_range(skb, FRA_SPORT_RANGE, &rule->sport_range)) ||
 	    (fib_rule_port_range_set(&rule->dport_range) &&
 	     nla_put_port_range(skb, FRA_DPORT_RANGE, &rule->dport_range)) ||
-	    (rule->ip_proto && nla_put_u8(skb, FRA_IP_PROTO, rule->ip_proto)))
+	    (rule->ip_proto && nla_put_u8(skb, FRA_IP_PROTO, rule->ip_proto)) ||
+	    (rule->dscp_mask && nla_put_u8(skb, FRA_DSCP, rule->dscp >> 2)))
 		goto nla_put_failure;
 
 	if (rule->suppress_ifgroup != -1) {

@@ -43,6 +43,8 @@ struct fib_rule {
 	struct fib_kuid_range	uid_range;
 	struct fib_rule_port_range	sport_range;
 	struct fib_rule_port_range	dport_range;
+	dscp_t			dscp;
+	dscp_t			dscp_mask;
 	struct rcu_head		rcu;
 };
 
