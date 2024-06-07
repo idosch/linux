@@ -798,7 +798,8 @@ static const struct nla_policy fib_rule_policy[FRA_MAX + 1] = {
 	[FRA_PROTOCOL]  = { .type = NLA_U8 },
 	[FRA_IP_PROTO]  = { .type = NLA_U8 },
 	[FRA_SPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) },
-	[FRA_DPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) }
+	[FRA_DPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) },
+	[FRA_DSCP] = NLA_POLICY_MAX(NLA_U8, DSCP_MAX - 1),
 };
 
 int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
