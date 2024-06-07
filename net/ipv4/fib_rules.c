@@ -186,7 +186,12 @@ INDIRECT_CALLABLE_SCOPE int fib4_rule_match(struct fib_rule *rule,
 	    ((daddr ^ r->dst) & r->dstmask))
 		return 0;
 
+	/* 'tos' selector. Matches on three TOS bits from RFC 791. */
 	if (r->dscp && r->dscp != inet_dsfield_to_dscp(fl4->flowi4_tos))
+		return 0;
+
+	/* 'dscp' selector. Matches on six DSCP bits. */
+	if ((rule->dscp ^ fl4->dscp) & rule->dscp_mask)
 		return 0;
 
 	if (rule->ip_proto && (rule->ip_proto != fl4->flowi4_proto))
