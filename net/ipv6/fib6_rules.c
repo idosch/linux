@@ -328,7 +328,12 @@ INDIRECT_CALLABLE_SCOPE int fib6_rule_match(struct fib_rule *rule,
 			return 0;
 	}
 
+	/* 'tos' selector. */
 	if (r->dscp && r->dscp != ip6_dscp(fl6->flowlabel))
+		return 0;
+
+	/* 'dscp' selector. */
+	if ((rule->dscp ^ ip6_dscp(fl6->flowlabel)) & rule->dscp_mask)
 		return 0;
 
 	if (rule->ip_proto && (rule->ip_proto != fl6->flowi6_proto))
