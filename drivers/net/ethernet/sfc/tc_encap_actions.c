@@ -15,6 +15,7 @@
 #include <net/geneve.h>
 #include <net/netevent.h>
 #include <net/arp.h>
+#include <net/inet_ecn.h>
 
 static const struct rhashtable_params efx_neigh_ht_params = {
 	.key_len	= offsetof(struct efx_neigh_binder, ha),
@@ -100,6 +101,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		flow4.flowi4_proto = IPPROTO_UDP;
 		flow4.fl4_dport = encap->key.tp_dst;
 		flow4.flowi4_tos = encap->key.tos;
+		flow4.dscp = inet_dsfield_to_dscp(encap->key.tos);
 		flow4.daddr = encap->key.u.ipv4.dst;
 		flow4.saddr = encap->key.u.ipv4.src;
 		break;

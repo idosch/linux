@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 OR Linux-OpenIB */
 /* Copyright (c) 2018 Mellanox Technologies. */
 
+#include <net/inet_dscp.h>
 #include <net/inet_ecn.h>
 #include <net/vxlan.h>
 #include <net/gre.h>
@@ -237,6 +238,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 
 	/* add the IP fields */
 	attr.fl.fl4.flowi4_tos = tun_key->tos & ~INET_ECN_MASK;
+	attr.fl.fl4.dscp = inet_dsfield_to_dscp(tun_key->tos);
 	attr.fl.fl4.daddr = tun_key->u.ipv4.dst;
 	attr.fl.fl4.saddr = tun_key->u.ipv4.src;
 	attr.ttl = tun_key->ttl;
@@ -353,6 +355,7 @@ int mlx5e_tc_tun_update_header_ipv4(struct mlx5e_priv *priv,
 
 	/* add the IP fields */
 	attr.fl.fl4.flowi4_tos = tun_key->tos & ~INET_ECN_MASK;
+	attr.fl.fl4.dscp = inet_dsfield_to_dscp(tun_key->tos);
 	attr.fl.fl4.daddr = tun_key->u.ipv4.dst;
 	attr.fl.fl4.saddr = tun_key->u.ipv4.src;
 	attr.ttl = tun_key->ttl;
