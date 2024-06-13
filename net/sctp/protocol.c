@@ -42,6 +42,7 @@
 #include <net/sctp/sctp.h>
 #include <net/addrconf.h>
 #include <net/inet_common.h>
+#include <net/inet_dscp.h>
 #include <net/inet_ecn.h>
 #include <net/udp_tunnel.h>
 
@@ -436,6 +437,7 @@ static void sctp_v4_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	fl4->flowi4_proto = IPPROTO_SCTP;
 	if (asoc) {
 		fl4->flowi4_tos = RT_TOS(tos);
+		fl4->dscp = inet_dsfield_to_dscp(tos);
 		fl4->flowi4_scope = ip_sock_rt_scope(asoc->base.sk);
 		fl4->flowi4_oif = asoc->base.sk->sk_bound_dev_if;
 		fl4->fl4_sport = htons(asoc->base.bind_addr.port);
