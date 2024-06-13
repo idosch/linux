@@ -32,6 +32,7 @@
 #include <linux/if_arp.h>
 #include <linux/gfp.h>
 #include <net/inet_common.h>
+#include <net/inet_dscp.h>
 #include <net/ip.h>
 #include <net/protocol.h>
 #include <net/netlink.h>
@@ -5884,6 +5885,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 		fl4.flowi4_oif = 0;
 	}
 	fl4.flowi4_tos = params->tos & IPTOS_RT_MASK;
+	fl4.dscp = inet_dsfield_to_dscp(params->tos);
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 	fl4.flowi4_flags = 0;
 
@@ -5893,7 +5895,6 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 	fl4.fl4_sport = params->sport;
 	fl4.fl4_dport = params->dport;
 	fl4.flowi4_multipath_hash = 0;
-	fl4.dscp = 0;
 
 	if (flags & BPF_FIB_LOOKUP_DIRECT) {
 		u32 tbid = l3mdev_fib_table_rcu(dev) ? : RT_TABLE_MAIN;
