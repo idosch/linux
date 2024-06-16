@@ -15,6 +15,7 @@
 
 #include <net/icmp.h>
 #include <net/inet_common.h>
+#include <net/inet_dscp.h>
 #include <net/inet_hashtables.h>
 #include <net/inet_sock.h>
 #include <net/protocol.h>
@@ -474,6 +475,7 @@ static struct dst_entry* dccp_v4_route_skb(struct net *net, struct sock *sk,
 		.daddr = iph->saddr,
 		.saddr = iph->daddr,
 		.flowi4_tos = ip_sock_rt_tos(sk),
+		.dscp = inet_dsfield_to_dscp(READ_ONCE(inet_sk(sk)->tos)),
 		.flowi4_scope = ip_sock_rt_scope(sk),
 		.flowi4_proto = sk->sk_protocol,
 		.fl4_sport = dccp_hdr(skb)->dccph_dport,
