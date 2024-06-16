@@ -32,6 +32,7 @@
 #include <linux/icmp.h>
 #include <net/dst.h>
 #include <net/flow.h>
+#include <net/inet_dscp.h>
 #include <net/inet_ecn.h>
 #include <net/xfrm.h>
 #include <net/ip.h>
@@ -3425,6 +3426,7 @@ decode_session4(const struct xfrm_flow_keys *flkeys, struct flowi *fl, bool reve
 
 	fl4->flowi4_proto = flkeys->basic.ip_proto;
 	fl4->flowi4_tos = flkeys->ip.tos & ~INET_ECN_MASK;
+	fl4->dscp = inet_dsfield_to_dscp(flkeys->ip.tos);
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
