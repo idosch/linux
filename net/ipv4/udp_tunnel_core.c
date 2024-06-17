@@ -4,6 +4,7 @@
 #include <linux/socket.h>
 #include <linux/kernel.h>
 #include <net/dst_metadata.h>
+#include <net/inet_dscp.h>
 #include <net/udp.h>
 #include <net/udp_tunnel.h>
 
@@ -233,6 +234,7 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 	fl4.fl4_dport = dport;
 	fl4.fl4_sport = sport;
 	fl4.flowi4_tos = RT_TOS(tos);
+	fl4.dscp = inet_dsfield_to_dscp(tos);
 	fl4.flowi4_flags = key->flow_flags;
 
 	rt = ip_route_output_key(net, &fl4);
