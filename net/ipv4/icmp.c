@@ -499,6 +499,7 @@ static struct rtable *icmp_route_lookup(struct net *net,
 	fl4->flowi4_mark = mark;
 	fl4->flowi4_uid = sock_net_uid(net, NULL);
 	fl4->flowi4_tos = RT_TOS(tos);
+	fl4->dscp = inet_dsfield_to_dscp(tos);
 	fl4->flowi4_proto = IPPROTO_ICMP;
 	fl4->fl4_icmp_type = type;
 	fl4->fl4_icmp_code = code;
