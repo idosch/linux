@@ -195,6 +195,7 @@ static inline struct rtable *ip_route_output_gre(struct net *net, struct flowi4 
 	fl4->daddr = daddr;
 	fl4->saddr = saddr;
 	fl4->flowi4_tos = tos;
+	fl4->dscp = inet_dsfield_to_dscp(tos);
 	fl4->flowi4_proto = IPPROTO_GRE;
 	fl4->fl4_gre_key = gre_key;
 	return ip_route_output_key(net, fl4);
