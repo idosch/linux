@@ -23,6 +23,7 @@
 #include <net/dst.h>
 #include <net/inetpeer.h>
 #include <net/flow.h>
+#include <net/inet_dscp.h>
 #include <net/inet_sock.h>
 #include <net/ip_fib.h>
 #include <net/arp.h>
@@ -161,6 +162,7 @@ static inline struct rtable *ip_route_output(struct net *net, __be32 daddr,
 	struct flowi4 fl4 = {
 		.flowi4_oif = oif,
 		.flowi4_tos = tos,
+		.dscp = inet_dsfield_to_dscp(tos),
 		.flowi4_scope = scope,
 		.daddr = daddr,
 		.saddr = saddr,
