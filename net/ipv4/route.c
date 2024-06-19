@@ -2473,7 +2473,7 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	struct fib_result res;
 	int err;
 
-	tos &= IPTOS_RT_MASK;
+	tos &= ~INET_ECN_MASK;
 	rcu_read_lock();
 	err = ip_route_input_rcu(skb, daddr, saddr, tos, dev, &res);
 	rcu_read_unlock();
@@ -3290,7 +3290,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		skb->dev	= dev;
 		skb->mark	= mark;
 		err = ip_route_input_rcu(skb, dst, src,
-					 rtm->rtm_tos & IPTOS_RT_MASK, dev,
+					 rtm->rtm_tos & ~INET_ECN_MASK, dev,
 					 &res);
 
 		rt = skb_rtable(skb);
