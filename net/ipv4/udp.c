@@ -99,6 +99,7 @@
 #include <linux/seq_file.h>
 #include <net/net_namespace.h>
 #include <net/icmp.h>
+#include <net/inet_ecn.h>
 #include <net/inet_hashtables.h>
 #include <net/ip_tunnels.h>
 #include <net/route.h>
@@ -2617,7 +2618,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 		if (!inet_sk(sk)->inet_daddr && in_dev)
 			return ip_mc_validate_source(skb, iph->daddr,
 						     iph->saddr,
-						     iph->tos & IPTOS_RT_MASK,
+						     iph->tos & ~INET_ECN_MASK,
 						     skb->dev, in_dev, &itag);
 	}
 	return 0;
