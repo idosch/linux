@@ -359,12 +359,12 @@ static int __fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	fl4.daddr = src;
 	fl4.saddr = dst;
 	fl4.flowi4_tos = tos & IPTOS_RT_MASK;
+	fl4.dscp = inet_dsfield_to_dscp(tos);
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 	fl4.flowi4_tun_key.tun_id = 0;
 	fl4.flowi4_flags = 0;
 	fl4.flowi4_uid = sock_net_uid(net, NULL);
 	fl4.flowi4_multipath_hash = 0;
-	fl4.dscp = 0;
 
 	no_addr = idev->ifa_list == NULL;
 
