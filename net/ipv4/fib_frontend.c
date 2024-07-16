@@ -1345,6 +1345,7 @@ static void nl_fib_lookup(struct net *net, struct fib_result_nl *frn)
 		.daddr = frn->fl_addr,
 		.flowi4_tos = frn->fl_tos,
 		.flowi4_scope = frn->fl_scope,
+		.flowi4_flags = FLOWI_FLAG_MATCH_FULL_DSCP,
 	};
 	struct fib_table *tb;
 
