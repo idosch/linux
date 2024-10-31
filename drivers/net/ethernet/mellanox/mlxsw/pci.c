@@ -378,10 +378,11 @@ static void mlxsw_pci_sdq_fini(struct mlxsw_pci *mlxsw_pci,
 	mlxsw_cmd_hw2sw_sdq(mlxsw_pci->core, q->num);
 }
 
-#define MLXSW_PCI_SKB_HEADROOM (NET_SKB_PAD + NET_IP_ALIGN)
+#define MLXSW_PCI_RX_BUF_HEADROOM (max(NET_SKB_PAD, XDP_PACKET_HEADROOM) + \
+				   NET_IP_ALIGN)
 
 #define MLXSW_PCI_RX_BUF_SW_OVERHEAD		\
-		(MLXSW_PCI_SKB_HEADROOM +	\
+		(MLXSW_PCI_RX_BUF_HEADROOM +	\
 		SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 
 static void
@@ -393,7 +394,7 @@ mlxsw_pci_wqe_rx_frag_set(struct mlxsw_pci *mlxsw_pci, struct page *page,
 	mapaddr = page_pool_get_dma_addr(page);
 
 	if (index == 0) {
-		mapaddr += MLXSW_PCI_SKB_HEADROOM;
+		mapaddr += MLXSW_PCI_RX_BUF_HEADROOM;
 		frag_len = frag_len - MLXSW_PCI_RX_BUF_SW_OVERHEAD;
 	}
 
@@ -449,7 +450,7 @@ static struct sk_buff *mlxsw_pci_rdq_build_skb(struct mlxsw_pci_queue *q,
 
 	page_pool = cq->u.cq.page_pool;
 	page_pool_dma_sync_for_cpu(page_pool, pages[page_index],
-				   MLXSW_PCI_SKB_HEADROOM, linear_data_size);
+				   MLXSW_PCI_RX_BUF_HEADROOM, linear_data_size);
 
 	data = page_address(pages[page_index]);
 	net_prefetch(data);
@@ -458,7 +459,7 @@ static struct sk_buff *mlxsw_pci_rdq_build_skb(struct mlxsw_pci_queue *q,
 	if (unlikely(!skb))
 		return ERR_PTR(-ENOMEM);
 
-	skb_reserve(skb, MLXSW_PCI_SKB_HEADROOM);
+	skb_reserve(skb, MLXSW_PCI_RX_BUF_HEADROOM);
 	skb_put(skb, linear_data_size);
 
 	if (linear_only)
