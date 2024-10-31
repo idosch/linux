@@ -43,6 +43,8 @@ mlxsw_core_flood_mode(struct mlxsw_core *mlxsw_core);
 int mlxsw_core_xdp_port_init(struct mlxsw_core *mlxsw_core, u16 local_port,
 			     struct net_device *netdev);
 void mlxsw_core_xdp_port_fini(struct mlxsw_core *mlxsw_core, u16 local_port);
+void mlxsw_core_xdp_port_prog_set(struct mlxsw_core *mlxsw_core, u16 local_port,
+				  struct bpf_prog *xdp_prog);
 
 void *mlxsw_core_driver_priv(struct mlxsw_core *mlxsw_core);
 
@@ -501,6 +503,8 @@ struct mlxsw_bus {
 	int (*xdp_port_init)(void *bus_priv, u16 local_port,
 			     struct net_device *netdev);
 	void (*xdp_port_fini)(void *bus_priv, u16 local_port);
+	void (*xdp_port_prog_set)(void *bus_priv, u16 local_port,
+				  struct bpf_prog *xdp_prog);
 	enum mlxsw_cmd_mbox_config_profile_lag_mode (*lag_mode)(void *bus_priv);
 	enum mlxsw_cmd_mbox_config_profile_flood_mode (*flood_mode)(void *priv);
 	u8 features;
