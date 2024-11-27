@@ -34,6 +34,9 @@ mlxsw_xdp_frags_init(struct xdp_buff *xdp_buff,
 		frag = &skb_shared_info->frags[skb_shared_info->nr_frags++];
 		skb_frag_fill_page_desc(frag, page, 0, frag_size);
 
+		if (page_is_pfmemalloc(page))
+			xdp_buff_set_frag_pfmemalloc(xdp_buff);
+
 		skb_shared_info->xdp_frags_size += frag_size;
 	}
 }
