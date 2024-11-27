@@ -528,6 +528,39 @@ mlxsw_pci_rdq_build_skb(struct mlxsw_pci_queue *q,
 	return skb;
 }
 
+static struct sk_buff *mlxsw_pci_rdq_build_skb_xdp(struct xdp_buff *xdp_buff)
+{
+	struct skb_shared_info *skb_shared_info;
+	unsigned int nr_frags;
+	struct sk_buff *skb;
+
+	if (xdp_buff_has_frags(xdp_buff)) {
+		/* Back up number of frags from shared info as it will be
+		 * overwritten by napi_build_skb() below.
+		 */
+		skb_shared_info = xdp_get_shared_info_from_buff(xdp_buff);
+		nr_frags = skb_shared_info->nr_frags;
+	}
+
+	net_prefetch(xdp_buff->data);
+	skb = napi_build_skb(xdp_buff->data_hard_start, xdp_buff->frame_sz);
+	if (unlikely(!skb))
+		return ERR_PTR(-ENOMEM);
+
+	skb_reserve(skb, xdp_buff->data - xdp_buff->data_hard_start);
+	skb_put(skb, xdp_buff->data_end - xdp_buff->data);
+
+	if (!xdp_buff_has_frags(xdp_buff))
+		return skb;
+
+	xdp_update_skb_shared_info(skb, nr_frags,
+				   skb_shared_info->xdp_frags_size,
+				   nr_frags * xdp_buff->frame_sz,
+				   xdp_buff_is_frag_pfmemalloc(xdp_buff));
+
+	return skb;
+}
+
 static int mlxsw_pci_rdq_page_alloc(struct mlxsw_pci_queue *q,
 				    struct mlxsw_pci_queue_elem_info *elem_info,
 				    int index)
@@ -893,7 +926,11 @@ static void mlxsw_pci_cqe_rdq_handle(struct mlxsw_pci *mlxsw_pci,
 				 rx_info.local_port))
 		goto out;
 
-	skb = mlxsw_pci_rdq_build_skb(q, &rx_pkt_info);
+	if (xdp_buff.data)
+		skb = mlxsw_pci_rdq_build_skb_xdp(&xdp_buff);
+	else
+		skb = mlxsw_pci_rdq_build_skb(q, &rx_pkt_info);
+
 	if (IS_ERR(skb)) {
 		dev_err_ratelimited(&pdev->dev, "Failed to build skb for RDQ\n");
 		mlxsw_pci_rdq_pages_recycle(q, rx_pkt_info.pages,
