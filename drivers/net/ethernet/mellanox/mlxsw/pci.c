@@ -905,10 +905,13 @@ mlxsw_pci_xdp_handle(struct mlxsw_pci *mlxsw_pci, struct mlxsw_pci_queue *q,
 
 	mlxsw_xdp_buff_init(xdp_buff, rx_pkt_info, &q->u.rdq.xdp_rxq);
 
-	xdp_status = mlxsw_xdp_run(xdp_buff, prog, xdp_port->netdev);
+	xdp_status = mlxsw_xdp_run(mlxsw_pci, xdp_buff, prog, xdp_port->netdev,
+				   local_port);
 	switch (xdp_status) {
 	case MLXSW_XDP_STATUS_PASS:
 		return false;
+	case MLXSW_XDP_STATUS_TX:
+		return true;
 	case MLXSW_XDP_STATUS_DROP:
 	case MLXSW_XDP_STATUS_FAIL:
 		skb_shared_info = xdp_get_shared_info_from_buff(xdp_buff);
