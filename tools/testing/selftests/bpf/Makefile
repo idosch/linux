@@ -145,7 +145,8 @@ TEST_PROGS := test_kmod.sh \
 	test_bpftool_metadata.sh \
 	test_doc_build.sh \
 	test_xsk.sh \
-	test_xdp_features.sh
+	test_xdp_features.sh \
+	test_xdp_features_vrf.sh
 
 TEST_PROGS_EXTENDED := with_addr.sh \
 	with_tunnels.sh ima_setup.sh verify_sig_setup.sh \
@@ -172,6 +173,9 @@ TEST_GEN_PROGS_EXTENDED = \
 	xskxceiver
 
 TEST_GEN_FILES += liburandom_read.so urandom_read sign-file uprobe_multi
+
+TEST_INCLUDES := ../net/lib.sh \
+		 ../net/forwarding/lib.sh
 
 ifneq ($(V),1)
 submake_extras := feature_display=0
