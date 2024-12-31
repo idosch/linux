@@ -310,6 +310,23 @@ fib_rule6_test()
 			"iif dscp no redirect to table"
 	fi
 
+	ip rule help 2>&1 | grep -q "DSCP\[/MASK\]"
+	if [ $? -eq 0 ]; then
+		match="dscp 0x0f/0x0f"
+		getmatch="tos $((0x1f << 2))"
+		getnomatch="tos $((0x1e << 2))"
+		fib_rule6_test_match_n_redirect "$match" "$getmatch" \
+			"$getnomatch" "dscp masked redirect to table" \
+			"dscp masked no redirect to table"
+
+		match="dscp 0x0f/0x0f"
+		getmatch="from $SRC_IP6 iif $DEV tos $((0x1f << 2))"
+		getnomatch="from $SRC_IP6 iif $DEV tos $((0x1e << 2))"
+		fib_rule6_test_match_n_redirect "$match" "$getmatch" \
+			"$getnomatch" "iif dscp masked redirect to table" \
+			"iif dscp masked no redirect to table"
+	fi
+
 	fib_check_iproute_support "flowlabel" "flowlabel"
 	if [ $? -eq 0 ]; then
 		match="flowlabel 0xfffff"
@@ -596,6 +613,23 @@ fib_rule4_test()
 		fib_rule4_test_match_n_redirect "$match" "$getmatch" \
 			"$getnomatch" "iif dscp redirect to table" \
 			"iif dscp no redirect to table"
+	fi
+
+	ip rule help 2>&1 | grep -q "DSCP\[/MASK\]"
+	if [ $? -eq 0 ]; then
+		match="dscp 0x0f/0x0f"
+		getmatch="tos $((0x1f << 2))"
+		getnomatch="tos $((0x1e << 2))"
+		fib_rule4_test_match_n_redirect "$match" "$getmatch" \
+			"$getnomatch" "dscp masked redirect to table" \
+			"dscp masked no redirect to table"
+
+		match="dscp 0x0f/0x0f"
+		getmatch="from $SRC_IP iif $DEV tos $((0x1f << 2))"
+		getnomatch="from $SRC_IP iif $DEV tos $((0x1e << 2))"
+		fib_rule4_test_match_n_redirect "$match" "$getmatch" \
+			"$getnomatch" "iif dscp masked redirect to table" \
+			"iif dscp masked no redirect to table"
 	fi
 }
 
