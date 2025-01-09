@@ -1218,6 +1218,28 @@ mlxsw_sp_port_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	}
 }
 
+static void mlxsw_sp_port_xdp_setup(struct mlxsw_sp_port *mlxsw_sp_port,
+				    struct bpf_prog *prog)
+{
+	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
+
+	mlxsw_core_bus_port_xdp_prog_set(mlxsw_sp->core,
+					 mlxsw_sp_port->local_port, prog);
+}
+
+static int mlxsw_sp_port_xdp(struct net_device *dev, struct netdev_bpf *xdp)
+{
+	struct mlxsw_sp_port *mlxsw_sp_port = netdev_priv(dev);
+
+	switch (xdp->command) {
+	case XDP_SETUP_PROG:
+		mlxsw_sp_port_xdp_setup(mlxsw_sp_port, xdp->prog);
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
 static const struct net_device_ops mlxsw_sp_port_netdev_ops = {
 	.ndo_open		= mlxsw_sp_port_open,
 	.ndo_stop		= mlxsw_sp_port_stop,
@@ -1233,6 +1255,7 @@ static const struct net_device_ops mlxsw_sp_port_netdev_ops = {
 	.ndo_vlan_rx_kill_vid	= mlxsw_sp_port_kill_vid,
 	.ndo_set_features	= mlxsw_sp_set_features,
 	.ndo_eth_ioctl		= mlxsw_sp_port_ioctl,
+	.ndo_bpf		= mlxsw_sp_port_xdp,
 };
 
 static int
