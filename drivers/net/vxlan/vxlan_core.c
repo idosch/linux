@@ -3810,6 +3810,21 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		return -EINVAL;
 	}
 
+	if ((old->dev->flags & IFF_UP) &&
+	    (vxlan_addr_multicast(&old->default_dst.remote_ip) ||
+	     vxlan_addr_multicast(&conf->remote_ip))) {
+		if (!vxlan_addr_equal(&old->default_dst.remote_ip,
+				      &conf->remote_ip)) {
+			NL_SET_ERR_MSG(extack, "Multicast group cannot be changed while up");
+			return -EINVAL;
+		}
+		if (old->default_dst.remote_ifindex != conf->remote_ifindex) {
+			NL_SET_ERR_MSG(extack,
+				       "Local interface for remote multicast destination cannot be changed while up");
+			return -EINVAL;
+		}
+	}
+
 	if (conf->remote_ifindex) {
 		struct net_device *lowerdev;
 
