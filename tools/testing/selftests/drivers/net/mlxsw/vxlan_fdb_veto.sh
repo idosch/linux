@@ -119,6 +119,10 @@ fdb_changelink_veto_test()
 {
 	RET=0
 
+	# Changes to MC IP would be bounced by core. Put vxlan0 down to expose
+	# the driver punts.
+	ip_link_set_down vxlan0
+
 	ip link set dev vxlan0 type vxlan \
 	   group $MC_IP dev lo 2>/dev/null
 	check_fail $? "FDB with a multicast IP not rejected"
