@@ -211,7 +211,7 @@ static int
 ___gnet_stats_copy_basic(struct gnet_dump *d,
 			 struct gnet_stats_basic_sync __percpu *cpu,
 			 struct gnet_stats_basic_sync *b,
-			 int type, bool running)
+			 int type, int pkt64_type, bool running)
 {
 	u64 bstats_bytes, bstats_packets;
 
@@ -233,7 +233,7 @@ ___gnet_stats_copy_basic(struct gnet_dump *d,
 		if (res < 0 || sb.packets == bstats_packets)
 			return res;
 		/* emit 64bit stats only if needed */
-		return gnet_stats_copy(d, TCA_STATS_PKT64, &bstats_packets,
+		return gnet_stats_copy(d, pkt64_type, &bstats_packets,
 				       sizeof(bstats_packets), TCA_STATS_PAD);
 	}
 	return 0;
@@ -262,7 +262,8 @@ gnet_stats_copy_basic(struct gnet_dump *d,
 		      struct gnet_stats_basic_sync *b,
 		      bool running)
 {
-	return ___gnet_stats_copy_basic(d, cpu, b, TCA_STATS_BASIC, running);
+	return ___gnet_stats_copy_basic(d, cpu, b, TCA_STATS_BASIC,
+					TCA_STATS_PKT64, running);
 }
 EXPORT_SYMBOL(gnet_stats_copy_basic);
 
@@ -289,7 +290,8 @@ gnet_stats_copy_basic_hw(struct gnet_dump *d,
 			 struct gnet_stats_basic_sync *b,
 			 bool running)
 {
-	return ___gnet_stats_copy_basic(d, cpu, b, TCA_STATS_BASIC_HW, running);
+	return ___gnet_stats_copy_basic(d, cpu, b, TCA_STATS_BASIC_HW,
+					TCA_STATS_PKT64_HW, running);
 }
 EXPORT_SYMBOL(gnet_stats_copy_basic_hw);
 
