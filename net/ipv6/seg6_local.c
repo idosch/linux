@@ -331,9 +331,9 @@ out:
 }
 
 int seg6_lookup_nexthop(struct sk_buff *skb,
-			struct in6_addr *nhaddr, u32 tbl_id)
+			struct in6_addr *nhaddr, u32 tbl_id, int oif)
 {
-	return seg6_lookup_any_nexthop(skb, nhaddr, tbl_id, false, 0);
+	return seg6_lookup_any_nexthop(skb, nhaddr, tbl_id, false, oif);
 }
 
 static __u8 seg6_flv_lcblock_octects(const struct seg6_flavors_info *finfo)
@@ -381,7 +381,7 @@ static void seg6_next_csid_advance_arg(struct in6_addr *addr,
 static int input_action_end_finish(struct sk_buff *skb,
 				   struct seg6_local_lwt *slwt)
 {
-	seg6_lookup_nexthop(skb, NULL, 0);
+	seg6_lookup_nexthop(skb, NULL, 0, 0);
 
 	return dst_input(skb);
 }
@@ -421,7 +421,7 @@ static int end_next_csid_core(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 static int input_action_end_x_finish(struct sk_buff *skb,
 				     struct seg6_local_lwt *slwt)
 {
-	seg6_lookup_nexthop(skb, &slwt->nh6, 0);
+	seg6_lookup_nexthop(skb, &slwt->nh6, 0, 0);
 
 	return dst_input(skb);
 }
@@ -836,7 +836,7 @@ static int input_action_end_t(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
-	seg6_lookup_nexthop(skb, NULL, slwt->table);
+	seg6_lookup_nexthop(skb, NULL, slwt->table, 0);
 
 	return dst_input(skb);
 
@@ -920,7 +920,7 @@ static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 	if (!ipv6_addr_any(&slwt->nh6))
 		nhaddr = &slwt->nh6;
 
-	seg6_lookup_nexthop(skb, nhaddr, 0);
+	seg6_lookup_nexthop(skb, nhaddr, 0, 0);
 
 	return dst_input(skb);
 }
@@ -1343,7 +1343,7 @@ static int input_action_end_b6(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
-	seg6_lookup_nexthop(skb, NULL, 0);
+	seg6_lookup_nexthop(skb, NULL, 0, 0);
 
 	return dst_input(skb);
 
@@ -1374,7 +1374,7 @@ static int input_action_end_b6_encap(struct sk_buff *skb,
 
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
-	seg6_lookup_nexthop(skb, NULL, 0);
+	seg6_lookup_nexthop(skb, NULL, 0, 0);
 
 	return dst_input(skb);
 
@@ -1458,7 +1458,7 @@ static int input_action_end_bpf(struct sk_buff *skb,
 	local_unlock_nested_bh(&seg6_bpf_srh_states.bh_lock);
 
 	if (ret != BPF_REDIRECT)
-		seg6_lookup_nexthop(skb, NULL, 0);
+		seg6_lookup_nexthop(skb, NULL, 0, 0);
 
 	return dst_input(skb);
 

@@ -15,7 +15,7 @@
 #include <linux/ipv6.h>
 
 extern int seg6_lookup_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
-			       u32 tbl_id);
+			       u32 tbl_id, int oif);
 extern bool seg6_bpf_has_valid_srh(struct sk_buff *skb);
 
 struct seg6_bpf_srh_state {

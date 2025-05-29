@@ -71,7 +71,7 @@ extern int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 			     int proto);
 extern int seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh);
 extern int seg6_lookup_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
-			       u32 tbl_id);
+			       u32 tbl_id, int oif);
 
 /* If the packet which invoked an ICMP error contains an SRH return
  * the true destination address from within the SRH, otherwise use the

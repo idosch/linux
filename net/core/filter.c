@@ -6489,7 +6489,7 @@ static int bpf_push_seg6_encap(struct sk_buff *skb, u32 type, void *hdr, u32 len
 
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
-	return seg6_lookup_nexthop(skb, NULL, 0);
+	return seg6_lookup_nexthop(skb, NULL, 0, 0);
 }
 #endif /* CONFIG_IPV6_SEG6_BPF */
 
@@ -6626,13 +6626,13 @@ BPF_CALL_4(bpf_lwt_seg6_action, struct sk_buff *, skb,
 			return -EBADMSG;
 		if (param_len != sizeof(struct in6_addr))
 			return -EINVAL;
-		return seg6_lookup_nexthop(skb, (struct in6_addr *)param, 0);
+		return seg6_lookup_nexthop(skb, (struct in6_addr *)param, 0, 0);
 	case SEG6_LOCAL_ACTION_END_T:
 		if (!seg6_bpf_has_valid_srh(skb))
 			return -EBADMSG;
 		if (param_len != sizeof(int))
 			return -EINVAL;
-		return seg6_lookup_nexthop(skb, NULL, *(int *)param);
+		return seg6_lookup_nexthop(skb, NULL, *(int *)param, 0);
 	case SEG6_LOCAL_ACTION_END_DT6:
 		if (!seg6_bpf_has_valid_srh(skb))
 			return -EBADMSG;
@@ -6651,7 +6651,7 @@ BPF_CALL_4(bpf_lwt_seg6_action, struct sk_buff *, skb,
 
 		bpf_compute_data_pointers(skb);
 		bpf_update_srh_state(skb);
-		return seg6_lookup_nexthop(skb, NULL, *(int *)param);
+		return seg6_lookup_nexthop(skb, NULL, *(int *)param, 0);
 	case SEG6_LOCAL_ACTION_END_B6:
 		if (srh_state->srh && !seg6_bpf_has_valid_srh(skb))
 			return -EBADMSG;
