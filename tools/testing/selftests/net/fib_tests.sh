@@ -12,7 +12,7 @@ TESTS="unregister down carrier nexthop suppress ipv6_notify ipv4_notify \
        ipv4_route_metrics ipv4_route_v6_gw rp_filter ipv4_del_addr \
        ipv6_del_addr ipv4_mangle ipv6_mangle ipv4_bcast_neigh fib6_gc_test \
        ipv4_mpath_list ipv6_mpath_list ipv4_mpath_balance ipv6_mpath_balance \
-       fib6_ra_to_static"
+       ipv4_mpath_oif ipv6_mpath_oif fib6_ra_to_static"
 
 VERBOSE=0
 PAUSE_ON_FAIL=no
@@ -2776,6 +2776,110 @@ ipv6_mpath_balance_test()
 	forwarding_cleanup
 }
 
+ipv4_mpath_oif_test_common()
+{
+	local get_param=$1; shift
+	local expected_oif=$1; shift
+	local test_name=$1; shift
+	local tmp_file
+
+	tmp_file=$(mktemp)
+
+	for i in {1..100}; do
+		$IP route get 203.0.113.${i} $get_param >> "$tmp_file"
+	done
+
+	[[ $(grep "$expected_oif" "$tmp_file" | wc -l) -eq 100 ]]
+	log_test $? 0 "$test_name"
+
+	rm "$tmp_file"
+}
+
+ipv4_mpath_oif_test()
+{
+	echo
+	echo "IPv4 multipath oif test"
+
+	setup
+
+	set -e
+	$IP link add dummy1 type dummy
+	$IP link set dev dummy1 up
+	$IP address add 192.0.2.1/28 dev dummy1
+	$IP address add 192.0.2.17/32 dev lo
+
+	$IP route add 203.0.113.0/24 \
+		nexthop via 198.51.100.2 dev dummy0 \
+		nexthop via 192.0.2.2 dev dummy1
+	set +e
+
+	ipv4_mpath_oif_test_common "oif dummy0" "dummy0" \
+		"IPv4 multipath via first nexthop"
+
+	ipv4_mpath_oif_test_common "oif dummy1" "dummy1" \
+		"IPv4 multipath via second nexthop"
+
+	ipv4_mpath_oif_test_common "oif dummy0 from 192.0.2.17" "dummy0" \
+		"IPv4 multipath via first nexthop with source address"
+
+	ipv4_mpath_oif_test_common "oif dummy1 from 192.0.2.17" "dummy1" \
+		"IPv4 multipath via second nexthop with source address"
+
+	cleanup
+}
+
+ipv6_mpath_oif_test_common()
+{
+	local get_param=$1; shift
+	local expected_oif=$1; shift
+	local test_name=$1; shift
+	local tmp_file
+
+	tmp_file=$(mktemp)
+
+	for i in {1..100}; do
+		$IP route get 2001:db8:10::${i} $get_param >> "$tmp_file"
+	done
+
+	[[ $(grep "$expected_oif" "$tmp_file" | wc -l) -eq 100 ]]
+	log_test $? 0 "$test_name"
+
+	rm "$tmp_file"
+}
+
+ipv6_mpath_oif_test()
+{
+	echo
+	echo "IPv6 multipath oif test"
+
+	setup
+
+	set -e
+	$IP link add dummy1 type dummy
+	$IP link set dev dummy1 up
+	$IP address add 2001:db8:2::1/64 dev dummy1
+	$IP address add 2001:db8:100::1/128 dev lo
+
+	$IP route add 2001:db8:10::/64 \
+		nexthop via 2001:db8:1::2 dev dummy0 \
+		nexthop via 2001:db8:2::2 dev dummy1
+	set +e
+
+	ipv6_mpath_oif_test_common "oif dummy0" "dummy0" \
+		"IPv6 multipath via first nexthop"
+
+	ipv6_mpath_oif_test_common "oif dummy1" "dummy1" \
+		"IPv6 multipath via second nexthop"
+
+	ipv6_mpath_oif_test_common "oif dummy0 from 2001:db8:100::1" "dummy0" \
+		"IPv6 multipath via first nexthop with source address"
+
+	ipv6_mpath_oif_test_common "oif dummy1 from 2001:db8:100::1" "dummy1" \
+		"IPv6 multipath via second nexthop with source address"
+
+	cleanup
+}
+
 ################################################################################
 # usage
 
@@ -2861,6 +2965,8 @@ do
 	ipv6_mpath_list)		ipv6_mpath_list_test;;
 	ipv4_mpath_balance)		ipv4_mpath_balance_test;;
 	ipv6_mpath_balance)		ipv6_mpath_balance_test;;
+	ipv4_mpath_oif)			ipv4_mpath_oif_test;;
+	ipv6_mpath_oif)			ipv6_mpath_oif_test;;
 	fib6_ra_to_static)		fib6_ra_to_static;;
 
 	help) echo "Test names: $TESTS"; exit 0;;
