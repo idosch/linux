@@ -10183,10 +10183,21 @@ int netif_change_proto_down(struct net_device *dev, bool proto_down)
 		return -EOPNOTSUPP;
 	if (!netif_device_present(dev))
 		return -ENODEV;
-	if (proto_down)
+	if (proto_down) {
 		netif_carrier_off(dev);
-	else
-		netif_carrier_on(dev);
+	} else {
+		int iflink = dev_get_iflink(dev);
+		bool carrier_on = true;
+
+		if (iflink != dev->ifindex) {
+			struct net_device *iflink_dev;
+
+			iflink_dev = __dev_get_by_index(dev_net(dev), iflink);
+			carrier_on = iflink_dev && netif_carrier_ok(iflink_dev);
+		}
+		if (carrier_on)
+			netif_carrier_on(dev);
+	}
 	WRITE_ONCE(dev->proto_down, proto_down);
 	return 0;
 }
