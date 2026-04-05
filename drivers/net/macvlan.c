@@ -1821,9 +1821,12 @@ static int macvlan_device_event(struct notifier_block *unused,
 	case NETDEV_UP:
 	case NETDEV_DOWN:
 	case NETDEV_CHANGE:
-		list_for_each_entry(vlan, &port->vlans, list)
+		list_for_each_entry(vlan, &port->vlans, list) {
+			if (vlan->dev->proto_down)
+				continue;
 			netif_stacked_transfer_operstate(vlan->lowerdev,
 							 vlan->dev);
+		}
 		break;
 	case NETDEV_FEAT_CHANGE:
 		list_for_each_entry(vlan, &port->vlans, list) {
