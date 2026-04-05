@@ -1422,6 +1422,9 @@ struct netdev_net_notifier {
  *			   struct kernel_hwtstamp_config *kernel_config,
  *			   struct netlink_ext_ack *extack);
  *	Change the hardware timestamping parameters for NIC device.
+ *
+ * void (*ndo_clear_proto_down)(struct net_device *dev);
+ *	Enable carrier after dev->proto_down was cleared.
  */
 struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
@@ -1669,6 +1672,7 @@ struct net_device_ops {
 	int			(*ndo_hwtstamp_set)(struct net_device *dev,
 						    struct kernel_hwtstamp_config *kernel_config,
 						    struct netlink_ext_ack *extack);
+	void			(*ndo_clear_proto_down)(struct net_device *dev);
 
 #if IS_ENABLED(CONFIG_NET_SHAPER)
 	/**
@@ -2045,7 +2049,6 @@ enum netdev_reg_state {
  *			ndo_hwtstamp_set() for all timestamp requests
  *			regardless of source, even if those aren't
  *			HWTSTAMP_SOURCE_NETDEV
- *	@change_proto_down: device supports setting carrier via IFLA_PROTO_DOWN
  *	@netns_immutable: interface can't change network namespaces
  *	@fcoe_mtu:	device supports maximum FCoE MTU, 2158 bytes
  *
@@ -2459,7 +2462,6 @@ struct net_device {
 
 	/* priv_flags_slow, ungrouped to save space */
 	unsigned long		see_all_hwtstamp_requests:1;
-	unsigned long		change_proto_down:1;
 	unsigned long		netns_immutable:1;
 	unsigned long		fcoe_mtu:1;
 

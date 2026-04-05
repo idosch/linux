@@ -3271,6 +3271,11 @@ static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 	return 0;
 }
 
+static void vxlan_clear_proto_down(struct net_device *dev)
+{
+	netif_carrier_on(dev);
+}
+
 static const struct net_device_ops vxlan_netdev_ether_ops = {
 	.ndo_init		= vxlan_init,
 	.ndo_uninit		= vxlan_uninit,
@@ -3292,6 +3297,7 @@ static const struct net_device_ops vxlan_netdev_ether_ops = {
 	.ndo_mdb_dump		= vxlan_mdb_dump,
 	.ndo_mdb_get		= vxlan_mdb_get,
 	.ndo_fill_metadata_dst	= vxlan_fill_metadata_dst,
+	.ndo_clear_proto_down	= vxlan_clear_proto_down,
 };
 
 static const struct net_device_ops vxlan_netdev_raw_ops = {
@@ -3302,6 +3308,7 @@ static const struct net_device_ops vxlan_netdev_raw_ops = {
 	.ndo_start_xmit		= vxlan_xmit,
 	.ndo_change_mtu		= vxlan_change_mtu,
 	.ndo_fill_metadata_dst	= vxlan_fill_metadata_dst,
+	.ndo_clear_proto_down	= vxlan_clear_proto_down,
 };
 
 /* Info for udev, that this is a virtual tunnel endpoint */
@@ -3368,7 +3375,6 @@ static void vxlan_setup(struct net_device *dev)
 
 	netif_keep_dst(dev);
 	dev->priv_flags |= IFF_NO_QUEUE;
-	dev->change_proto_down = true;
 	dev->lltx = true;
 
 	/* MTU range: 68 - 65535 */

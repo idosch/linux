@@ -904,6 +904,11 @@ static int macvlan_hwtstamp_set(struct net_device *dev,
 	return generic_hwtstamp_set_lower(real_dev, cfg, extack);
 }
 
+static void macvlan_clear_proto_down(struct net_device *dev)
+{
+	netif_stacked_transfer_operstate(macvlan_dev_real_dev(dev), dev);
+}
+
 /*
  * macvlan network devices have devices nesting below it and are a special
  * "super class" of normal network devices; split their locks off into a
@@ -1211,6 +1216,7 @@ static const struct net_device_ops macvlan_netdev_ops = {
 	.ndo_features_check	= passthru_features_check,
 	.ndo_hwtstamp_get	= macvlan_hwtstamp_get,
 	.ndo_hwtstamp_set	= macvlan_hwtstamp_set,
+	.ndo_clear_proto_down	= macvlan_clear_proto_down,
 };
 
 static void macvlan_dev_free(struct net_device *dev)
@@ -1230,7 +1236,6 @@ void macvlan_common_setup(struct net_device *dev)
 	dev->priv_flags	       &= ~IFF_TX_SKB_SHARING;
 	netif_keep_dst(dev);
 	dev->priv_flags	       |= IFF_UNICAST_FLT;
-	dev->change_proto_down	= true;
 	dev->netdev_ops		= &macvlan_netdev_ops;
 	dev->needs_free_netdev	= true;
 	dev->priv_destructor	= macvlan_dev_free;

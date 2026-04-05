@@ -10198,14 +10198,14 @@ EXPORT_SYMBOL(netdev_port_same_parent_id);
 
 int netif_change_proto_down(struct net_device *dev, bool proto_down)
 {
-	if (!dev->change_proto_down)
+	if (!dev->netdev_ops->ndo_clear_proto_down)
 		return -EOPNOTSUPP;
 	if (!netif_device_present(dev))
 		return -ENODEV;
 	if (proto_down)
 		netif_carrier_off(dev);
 	else
-		netif_carrier_on(dev);
+		dev->netdev_ops->ndo_clear_proto_down(dev);
 	WRITE_ONCE(dev->proto_down, proto_down);
 	return 0;
 }
